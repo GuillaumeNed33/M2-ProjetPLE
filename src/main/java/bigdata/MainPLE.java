@@ -11,16 +11,23 @@ import java.util.Arrays;
 
 public class MainPLE {
 
+	private static final String PHASES_FILE_URL = "/raw_data/ALCF_repo/phases.csv";
+	private static final String JOBS_FILE_URL = "/raw_data/ALCF_repo/jobs.csv";
+	private static final String PATTERNS_FILE_URL = "/raw_data/ALCF_repo/patterns.csv";
+
 	public static void main(String[] args) {
+		if (args.length != 4) {
+			System.out.println("Expected exactly 4 arguments -- " + args.length + " given.");
+		} else {
+			startProgram(args);
+		}
+	}
+
+	private static void startProgram(String[] target_patterns) {
 		SparkConf conf = new SparkConf().setAppName("Projet PLE 2019");
 		JavaSparkContext context = new JavaSparkContext(conf);
 
-		String phasesFileURL = "/raw_data/ALCF_repo/phases.csv";
-		String jobsFileURL = "/raw_data/ALCF_repo/jobs.csv";
-		String patternsFileURL = "/raw_data/ALCF_repo/patterns.csv";
-		String[] target_patterns = {"1", "2", "3", "4"};
-
-		JavaRDD<String[]> rdd = context.textFile(phasesFileURL).map(line -> line.split(";"));
+		JavaRDD<String[]> rdd = context.textFile(PHASES_FILE_URL).map(line -> line.split(";"));
 		rdd= rdd.coalesce(5, true); // set number of partitions
 
 		//Map : key = timestamp_debut-timestamp_fin, value=patterns
@@ -45,9 +52,8 @@ public class MainPLE {
 			}
 		});
 
-		System.out.println("NOMBRE DE DONNEES: " + rdd.count());
-		System.out.println("NOMBRE DE DONNEES FILTREE: " + filtered.count());
-		System.out.println("NOMBRE DE PARTITIONS : " + rdd.getNumPartitions());
+		System.out.println("---------------NOMBRE DE DONNEES: " + rdd.count());
+		System.out.println("---------------NOMBRE DE DONNEES FILTREE: " + filtered.count());
+		System.out.println("---------------NOMBRE DE PARTITIONS : " + rdd.getNumPartitions());
 	}
-	
 }
