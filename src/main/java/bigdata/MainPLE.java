@@ -15,33 +15,97 @@ public class MainPLE {
 	private static final String JOBS_FILE_URL = "/raw_data/ALCF_repo/jobs.csv";
 	private static final String PATTERNS_FILE_URL = "/raw_data/ALCF_repo/patterns.csv";
 
-	private void getDistribOfDurationNotIDLE() {} // Question 1.a
-	private void getDistribOfDurationIDLE() {} // Question 1.b (pattern = -1)
-	private void getDistribOfDurationAlonePattern(String pattern) {} // Question 1.c (foreach patterns - 22)
+	/**
+	 * Question 1.a
+	 */
+	private static void getDistribOfDurationNotIDLE() {
+		SparkConf conf = new SparkConf().setAppName("Projet PLE 2019");
+		JavaSparkContext context = new JavaSparkContext(conf);
+	}
 
-	private void getDistribOfNbPatternsPerPhase() {} // Question 2.a
-	private void getDistribOfNbJobsPerPhase() {} // Question 3.a
+	/**
+	 * Question 1.b (when pattern == -1)
+	 */
+	private static void getDistribOfDurationIDLE() {
+		SparkConf conf = new SparkConf().setAppName("Projet PLE 2019");
+		JavaSparkContext context = new JavaSparkContext(conf);
+	}
 
-	private void getDistribOfTotalPFSAccessPerJob() {} // Question 4.a
-	private void getTop10JobsTotalPFSAccess() {} // Question 4.b
+	/**
+	 * Question 1.c (to do on all patterns (22) )
+	 * @param pattern targeted pattern
+	 */
+	private static void getDistribOfDurationAlonePattern(String pattern) {
+		SparkConf conf = new SparkConf().setAppName("Projet PLE 2019");
+		JavaSparkContext context = new JavaSparkContext(conf);
+	}
 
-	private void getTotalDurationIDLE() {} // Question 5
+	/**
+	 * Question 2.a
+	 */
+	private static void getDistribOfNbPatternsPerPhase() {
+		SparkConf conf = new SparkConf().setAppName("Projet PLE 2019");
+		JavaSparkContext context = new JavaSparkContext(conf);
+	}
 
-	private void getDistribOfTotalTimeWithAPatternAlone() {} // Question 6.a
-	private void getTop10patterns() {} // Question 6.b
+	/**
+	 * Question 3.a
+	 */
+	private static void getDistribOfNbJobsPerPhase() {
+		SparkConf conf = new SparkConf().setAppName("Projet PLE 2019");
+		JavaSparkContext context = new JavaSparkContext(conf);
+	}
 
-	private void getLinesMatchingWithPatterns(String[] patterns) {} // Question 7
+	/**
+	 * Question 4.a
+	 */
+	private static void getDistribOfTotalPFSAccessPerJob() {
+		SparkConf conf = new SparkConf().setAppName("Projet PLE 2019");
+		JavaSparkContext context = new JavaSparkContext(conf);
+	}
 
+	/**
+	 * Question 4.b
+	 */
+	private static void getTop10JobsTotalPFSAccess() {
+		SparkConf conf = new SparkConf().setAppName("Projet PLE 2019");
+		JavaSparkContext context = new JavaSparkContext(conf);
+	}
 
-	private static void startProgram(String[] target_patterns) {
+	/**
+	 * Question 5
+	 */
+	private static void getTotalDurationIDLE() {
+		SparkConf conf = new SparkConf().setAppName("Projet PLE 2019");
+		JavaSparkContext context = new JavaSparkContext(conf);
+	}
+
+	/**
+	 * Question 6.a
+	 */
+	private static void getDistribOfTotalTimeWithAPatternAlone() {
+		SparkConf conf = new SparkConf().setAppName("Projet PLE 2019");
+		JavaSparkContext context = new JavaSparkContext(conf);
+	}
+
+	/**
+	 * Question 6.b
+	 */
+	private static void getTop10patterns() {
+		SparkConf conf = new SparkConf().setAppName("Projet PLE 2019");
+		JavaSparkContext context = new JavaSparkContext(conf);
+	}
+
+	/**
+	 * Question 7
+	 * @param target_patterns pattern matching
+	 */
+	private static void getLinesMatchingWithPatterns(String[] target_patterns) {
 		SparkConf conf = new SparkConf().setAppName("Projet PLE 2019");
 		JavaSparkContext context = new JavaSparkContext(conf);
 
-
 		JavaRDD<String[]> rdd = context.textFile(PHASES_FILE_URL).map(line -> line.split(";"));
-		rdd= rdd.coalesce(5, true); // set number of partitions
 
-		/*** QUESION 7 ***/
 		//Map : key = timestamp_debut-timestamp_fin, value=patterns
 		JavaPairRDD<String, String> rddp = rdd.mapToPair(s -> new Tuple2<String, String>(s[0] + "-" + s[1], s[3]));
 
@@ -68,12 +132,61 @@ public class MainPLE {
 		System.out.println("---------------NOMBRE DE PARTITIONS : " + rdd.getNumPartitions());
 	}
 
+	/**
+	 * Main program
+	 * @param args program's arguments
+	 */
 	public static void main(String[] args) {
-		if (args.length != 4) {
-			System.out.println("Expected exactly 4 arguments -- " + args.length + " given.");
+		if (args.length == 0) {
+			System.out.println("Expected arguments -- ");
 		} else {
-			startProgram(args);
+			switch (args[0]) {
+				case "1a":
+					getDistribOfDurationNotIDLE();
+					break;
+				case "1b":
+					getDistribOfDurationIDLE();
+					break;
+				case "1c":
+					//Foreach pattern
+					for(int i = 0; i < 22; i++) {
+						getDistribOfDurationAlonePattern(Integer.toString(i));
+					}
+					break;
+				case "2a":
+					getDistribOfNbPatternsPerPhase();
+					break;
+				case "3a":
+					getDistribOfNbJobsPerPhase();
+					break;
+				case "4a":
+					getDistribOfTotalPFSAccessPerJob();
+					break;
+				case "4b":
+					getTop10JobsTotalPFSAccess();
+					break;
+				case "5":
+					getTotalDurationIDLE();
+					break;
+				case "6a":
+					getDistribOfTotalTimeWithAPatternAlone();
+					break;
+				case "6b":
+					getTop10patterns();
+					break;
+				case "7":
+					if(args.length != 5) {
+						System.out.println("Expected exactly 4 patterns in arguments (after the first argument). " + (args.length-1) + " argument(s) given.");
+					} else {
+						String[] patterns = {args[1], args[2], args[3], args[4]};
+						getLinesMatchingWithPatterns(patterns);
+					}
+					break;
+				default:
+					System.out.println("Your argument " + args[0] + " does not match to any question in the project.");
+					System.out.println("Valid arguments : 1a | 1b | 1c | 2a | 3a | 4a | 4b | 5 | 6a | 6b | 7");
+					break;
+			}
 		}
 	}
-
 }
