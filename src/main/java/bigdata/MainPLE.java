@@ -13,8 +13,10 @@ import java.util.Arrays;
 
 public class MainPLE {
 
+	//private static final String PHASES_FILE_URL = "/user/gnedelec001/phasesHead.csv";
 	//private static final String PHASES_FILE_URL = "/user/gnedelec001/phases1Go.csv";
-	private static final String PHASES_FILE_URL = "/user/gnedelec001/phases10Go.csv";
+	private static final String PHASES_FILE_URL = "/user/gnedelec001/phasesHead1Go.csv";
+	//private static final String PHASES_FILE_URL = "/user/gnedelec001/phases10Go.csv";
 	//private static final String PHASES_FILE_URL = "/raw_data/ALCF_repo/phases.csv";
 	private static final String JOBS_FILE_URL = "/raw_data/ALCF_repo/jobs.csv";
 	private static final String PATTERNS_FILE_URL = "/raw_data/ALCF_repo/patterns.csv";
@@ -42,8 +44,8 @@ public class MainPLE {
 	private static Function<Tuple2<String, String>,  Boolean> filterIDLE = new Function<Tuple2<String, String>,  Boolean>() {
 		@Override
 		public Boolean call(Tuple2<String, String> data) throws Exception {
-			String[] patterns = data._2().split("-")[1].split(",");
-			return Arrays.asList(patterns).contains("-1");
+			String[] patterns = data._2().split("/")[1].split(",");
+			return Arrays.asList(patterns).contains("-1") && !Arrays.asList(patterns).contains("phases");
 		}
 	};
 
@@ -53,8 +55,8 @@ public class MainPLE {
 	private static Function<Tuple2<String, String>, Boolean> filterNotIDLE = new Function<Tuple2<String, String>, Boolean>() {
 		@Override
 		public Boolean call(Tuple2<String, String> data) throws Exception {
-			String[] patterns = data._2().split("-")[1].split(",");
-			return !Arrays.asList(patterns).contains("-1");
+			String[] patterns = data._2().split("/")[1].split(",");
+			return !Arrays.asList(patterns).contains("-1") && !Arrays.asList(patterns).contains("phases");
 		}
 	};
 
@@ -64,7 +66,7 @@ public class MainPLE {
 	private static Function<Tuple2<String, String>, Boolean> filterMatchingPatterns = new Function<Tuple2<String, String>, Boolean>() {
 		@Override
 		public Boolean call(Tuple2<String, String> data) throws Exception {
-			String[] patterns = data._2().split("-")[1].split(",");
+			String[] patterns = data._2().split("/")[1].split(",");
 			boolean isMatching = false;
 			int i = 0;
 			while(!isMatching && i < target_patterns.length) {
@@ -96,14 +98,18 @@ public class MainPLE {
 
 		System.out.println("NOMBRE DE DONNEES TOTALE : " + data.count());
 		System.out.println("NOMBRE DE DONNEES NON IDLE: " + filtered.count());
-		StatCounter statCounter = doubleForStats.stats();
-		displayDistribution(statCounter);
+		//StatCounter statCounter = doubleForStats.stats();
+		//displayDistribution(statCounter);
 	}
 
 	/**
 	 * Question 1.b (when pattern == -1)
 	 */
-	private static void getDistribOfDurationIDLE(JavaPairRDD<String, String> data) {}
+	private static void getDistribOfDurationIDLE(JavaPairRDD<String, String> data) {
+		JavaPairRDD<String, String> filtered = data.filter(filterIDLE);
+		System.out.println("NOMBRE DE DONNEES TOTALE : " + data.count());
+		System.out.println("NOMBRE DE DONNEES NON IDLE: " + filtered.count());
+	}
 
 	/**
 	 * Question 1.c (to do on all patterns (22) )
@@ -166,9 +172,9 @@ public class MainPLE {
 			JavaRDD<String[]> rdd = context.textFile(PHASES_FILE_URL).map(line -> line.split(";"));
 
 			// Mapping lines with :
-			// KEY=timestamp_start-timestamp_end
-			// VALUE = duration-patterns-npatterns-jobs-njobs-days-ndays
-			JavaPairRDD<String, String> data = rdd.mapToPair(s -> new Tuple2<String, String>(s[0] + "-" + s[1], s[2] + "-" + s[3] + "-" + s[4] + "-" + s[5] + "-" + s[6] + "-" + s[7] + "-" + s[8]));
+			// KEY = timestamp_start/timestamp_end
+			// VALUE = duration/patterns/npatterns/jobs/njobs/days/ndays
+			JavaPairRDD<String, String> data = rdd.mapToPair(s -> new Tuple2<String, String>(s[0] + "/" + s[1], s[2] + "/" + s[3] + "/" + s[4] + "/" + s[5] + "/" + s[6] + "/" + s[7] + "/" + s[8]));
 
 			switch (args[0]) {
 				case "1a":
@@ -217,7 +223,7 @@ public class MainPLE {
 					System.out.println("Valid arguments : " + String.join(" | ", argsPossibilities));
 					break;
 			}
-			System.out.println("---------------NOMBRE DE DONNEES RDD : " + rdd.getNumPartitions());
+			System.out.println("---------------NOMBRE DE DONNEES RDD : " + (rdd.count() -1)); // -1 is the first line with CSV headers
 			System.out.println("---------------NOMBRE DE PARTITIONS RDD : " + rdd.getNumPartitions());
 			context.close();
 		} else {

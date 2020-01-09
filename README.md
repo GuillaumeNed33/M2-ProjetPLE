@@ -15,7 +15,7 @@ Pour compiler exécutez la commande suivante :
     
 Pour lancer le programme, executez la commande suivante avec en arguments, le numéro de la question du sujet :
     
-    $ spark-submit --deploy-mode cluster --class bigdata.MainPLE target/ProjetPLE-0.0.1.jar <questionID> <otherArguments>
+    $ spark-submit --class bigdata.MainPLE target/ProjetPLE-0.0.1.jar <questionID> <otherArguments>
     
 Les différentes possibilités de question sont les suivantes : 
 | **1a** | **1b** | **1c** | **2a** | **3a** | **4a** | **4b** | **5** | **6a** | **6b** | **7** |
@@ -23,6 +23,6 @@ Les différentes possibilités de question sont les suivantes :
 Pour la question 7, il faut renseigner exactement 4 patterns en arguments pour que le programme s'execute.  
 Les patterns ciblés par le programmes doivent être donnés en arguments avec leur identifiants. Par exemple, si on souhaite utiliser les patterns "1", "2", "3" et "4", la commande serait : 
 
-    $ spark-submit --deploy-mode cluster --class bigdata.MainPLE target/ProjetPLE-0.0.1.jar 7 1 2 3 4
+    $ spark-submit --class bigdata.MainPLE target/ProjetPLE-0.0.1.jar 7 1 2 3 4
 
 Les chemins vers les fichiers `phases.csv`, `jobs.csv` et `patterns.csv` sont écrits en durs dans le code.  
