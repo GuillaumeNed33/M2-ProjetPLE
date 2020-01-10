@@ -7,36 +7,23 @@ import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.DoubleFunction;
 import org.apache.spark.api.java.function.Function;
-import org.apache.spark.util.StatCounter;
 import scala.Tuple2;
-import java.util.Arrays;
+
+import java.util.*;
 
 public class MainPLE {
 
-	//private static final String PHASES_FILE_URL = "/user/gnedelec001/phasesHead.csv";
-	//private static final String PHASES_FILE_URL = "/user/gnedelec001/phases1Go.csv";
 	private static final String PHASES_FILE_URL = "/user/gnedelec001/phasesHead1Go.csv";
-	//private static final String PHASES_FILE_URL = "/user/gnedelec001/phases10Go.csv";
+	//private static final String PHASES_FILE_URL = "/user/gnedelec001/phasesHead10Go.csv";
+	//private static final String PHASES_FILE_URL = "/user/gnedelec001/phasesTail1Go.csv";
+	//private static final String PHASES_FILE_URL = "/user/gnedelec001/phasesTail10Go.csv";
 	//private static final String PHASES_FILE_URL = "/raw_data/ALCF_repo/phases.csv";
 	private static final String JOBS_FILE_URL = "/raw_data/ALCF_repo/jobs.csv";
 	private static final String PATTERNS_FILE_URL = "/raw_data/ALCF_repo/patterns.csv";
 
 	private static final String[] argsPossibilities= {"1a", "1b", "1c", "2a", "3a", "4a", "4b", "5", "6a", "6b", "7"};
 	private static String[] target_patterns;
-
-	/**
-	 * Display distribution ( Minimum, Maximum, Moyenne, Médiane, premier quadrants, quatrième quadrants, histogramme )
-	 */
-	private static void displayDistribution(StatCounter statCounter) {
-		//Minimum, Maximum, Moyenne, Médiane, premier quadrants, quatrième quadrants, histogramme
-		System.out.println("Count:    " + statCounter.count());
-		System.out.println("Min:      " + statCounter.min());
-		System.out.println("Max:      " + statCounter.max());
-		System.out.println("Sum:      " + statCounter.sum());
-		System.out.println("Mean:     " + statCounter.mean());
-		System.out.println("Variance: " + statCounter.variance());
-		System.out.println("Stdev:    " + statCounter.stdev());
-	}
+	private static String patterns_selected;
 
 	/**
 	 * Return true if patterns column == -1
@@ -61,104 +48,169 @@ public class MainPLE {
 	};
 
 	/**
-	 * Return true if pattern columns contains at least 1 pattern from patterns in arguments
+	 * Return true if patterns column != -1
+	 */
+	private static Function<Tuple2<String, String>, Boolean> filterAlonePattern = new Function<Tuple2<String, String>, Boolean>() {
+		@Override
+		public Boolean call(Tuple2<String, String> data) throws Exception {
+			String[] patterns = data._2().split("/")[1].split(",");
+			return patterns.length == 1 && patterns[0].equals(patterns_selected);
+		}
+	};
+
+	/**
+	 * Return true if pattern columns contains all patterns from patterns in arguments
 	 */
 	private static Function<Tuple2<String, String>, Boolean> filterMatchingPatterns = new Function<Tuple2<String, String>, Boolean>() {
 		@Override
 		public Boolean call(Tuple2<String, String> data) throws Exception {
 			String[] patterns = data._2().split("/")[1].split(",");
-			boolean isMatching = false;
+			boolean allAreMatching = true;
 			int i = 0;
-			while(!isMatching && i < target_patterns.length) {
+			while(allAreMatching && i < target_patterns.length) {
 				String currentPattern = target_patterns[i];
-				if(Arrays.asList(patterns).contains(currentPattern)) {
-					isMatching = true;
+				if(!Arrays.asList(patterns).contains(currentPattern)) {
+					allAreMatching = false;
 				} else {
 					i++;
 				}
 			}
-			return isMatching;
+			return allAreMatching;
 		}
 	};
 
+	/**
+	 * Map data to double for stats
+	 */
+	private static DoubleFunction<Tuple2<String, String>> mappingDurationForStats = new DoubleFunction<Tuple2<String, String>>() {
+		@Override
+		public double call(Tuple2<String, String> data) throws Exception {
+			String duration = data._2().split("/")[0];
+			return Double.parseDouble(duration);
+		}
+	};
+
+	/**
+	 * Display distribution ( Minimum, Maximum, Moyenne, Médiane, premier quadrants, troisième quadrants, histogramme )
+	 */
+	private static void displayDistribution(JavaDoubleRDD data) {
+		List<Double> dataList = new ArrayList<>(data.collect());
+		Collections.sort(dataList);
+		System.out.println(dataList);
+
+		int indexMedian = (data.count() % 2 == 0) ? ((int)(data.count()/2)) : (int) ((data.count() + 1) / 2);
+		double median = (data.count() % 2 == 0) ? (dataList.get(indexMedian) + dataList.get(indexMedian+1))/2 : dataList.get(indexMedian);
+		int oneQuarter = (int)Math.ceil(data.count()/4.); //Calculate the number of value in one quarter
+		int threeQuarter = (int)Math.ceil(3*data.count()/4.); //Calculate the number of value in three quarter
+		double firstQuartile = dataList.get(oneQuarter); //Max value of 25% of dataset
+		double thirdQuartile = dataList.get(threeQuarter); //Max value of 75% of dataset
+
+		System.out.println("Minimum:      " + data.min());
+		System.out.println("Maximum:      " + data.max());
+		System.out.println("Moyenne:     " + data.mean());
+		System.out.println("Médiane:     " + median);
+		System.out.println("Premier quartile:     " + firstQuartile);
+		System.out.println("Troisième quartile:     " + thirdQuartile);
+		System.out.println("Histogramme:	\n" + data.histogram(10));
+	}
 
 	/**
 	 * Question 1.a
 	 */
 	private static void getDistribOfDurationNotIDLE(JavaPairRDD<String, String> data) {
-		JavaPairRDD<String, String> filtered = data.filter(filterNotIDLE);
+		JavaPairRDD<String, String> filteredData = data.filter(filterNotIDLE);
+		JavaDoubleRDD dataForStats = filteredData.mapToDouble(mappingDurationForStats);
 
-		JavaDoubleRDD doubleForStats = filtered.mapToDouble(new DoubleFunction<Tuple2<String, String>>() {
-			@Override
-			public double call(Tuple2<String, String> stringLongTuple2) throws Exception {
-				String duration = stringLongTuple2._2().split("-")[0];
-				return Double.parseDouble(duration);
-			}
-		});
-
-		System.out.println("NOMBRE DE DONNEES TOTALE : " + data.count());
-		System.out.println("NOMBRE DE DONNEES NON IDLE: " + filtered.count());
-		//StatCounter statCounter = doubleForStats.stats();
-		//displayDistribution(statCounter);
+		System.out.println("--- DISTRIBUTION DES DUREES DES PHASES NON IDLE ---");
+		System.out.println("Nombre de plages horaires correspondantes: " + filteredData.count() + " sur " + data.count());
+		displayDistribution(dataForStats);
 	}
 
 	/**
-	 * Question 1.b (when pattern == -1)
+	 * Question 1.b (pattern == -1)
 	 */
 	private static void getDistribOfDurationIDLE(JavaPairRDD<String, String> data) {
-		JavaPairRDD<String, String> filtered = data.filter(filterIDLE);
-		System.out.println("NOMBRE DE DONNEES TOTALE : " + data.count());
-		System.out.println("NOMBRE DE DONNEES NON IDLE: " + filtered.count());
+		JavaPairRDD<String, String> filteredData = data.filter(filterIDLE);
+		JavaDoubleRDD dataForStats = filteredData.mapToDouble(mappingDurationForStats);
+
+		System.out.println("--- DISTRIBUTION DES DUREES DES PHASES IDLE ---");
+		System.out.println("Nombre de plages horaires correspondantes: " + filteredData.count() + " sur " + data.count());
+		displayDistribution(dataForStats);
 	}
 
 	/**
-	 * Question 1.c (to do on all patterns (22) )
+	 * Question 1.c
 	 * @param pattern targeted pattern
 	 */
-	private static void getDistribOfDurationAlonePattern(JavaPairRDD<String, String> data, String pattern) {}
+	private static void getDistribOfDurationAlonePattern(JavaPairRDD<String, String> data, String pattern) {
+		patterns_selected = pattern; //Save the pattern to allow access to it  in filterAlonePattern method
+		JavaPairRDD<String, String> filteredData = data.filter(filterAlonePattern);
+		JavaDoubleRDD dataForStats = filteredData.mapToDouble(mappingDurationForStats);
+		System.out.println("--- DISTRIBUTION DES DUREES OU LE PATTERN " + pattern + " APPARAIT SEUL ---");
+		System.out.println("Nombre de plages horaires correspondantes: " + filteredData.count() + " sur " + data.count());
+		displayDistribution(dataForStats);
+	}
 
 	/**
 	 * Question 2.a
 	 */
-	private static void getDistribOfNbPatternsPerPhase(JavaPairRDD<String, String> data) {}
+	private static void getDistribOfNbPatternsPerPhase(JavaPairRDD<String, String> data) {
+		JavaPairRDD<String, String> filteredData = data.filter(filterNotIDLE);
+		System.out.println("--- DISTRIBUTION DES NPATTERNS DES PHASES NON IDLE ---");
+		System.out.println("Nombre de plages horaires correspondantes: " + filteredData.count() + " sur " + data.count());
+	}
 
 	/**
 	 * Question 3.a
 	 */
-	private static void getDistribOfNbJobsPerPhase(JavaPairRDD<String, String> data) {}
+	private static void getDistribOfNbJobsPerPhase(JavaPairRDD<String, String> data) {
+		JavaPairRDD<String, String> filteredData = data.filter(filterNotIDLE);
+		System.out.println("--- DISTRIBUTION DES NJOBS DES PHASES NON IDLE ---");
+		System.out.println("Nombre de plages horaires correspondantes: " + filteredData.count() + " sur " + data.count());
+	}
 
 	/**
 	 * Question 4.a
 	 */
-	private static void getDistribOfTotalPFSAccessPerJob(JavaPairRDD<String, String> data) {}
+	private static void getDistribOfTotalPFSAccessPerJob(JavaPairRDD<String, String> data) {
+		System.out.println("--- DISTRIBUTION DU TEMPS TOTAL D'ACCES AU PFS PAR JOB ---");
+	}
 
 	/**
 	 * Question 4.b
 	 */
-	private static void getTop10JobsTotalPFSAccess(JavaPairRDD<String, String> data) {}
+	private static void getTop10JobsTotalPFSAccess(JavaPairRDD<String, String> data) {
+		System.out.println("--- TOP 10 DES JOBS EN TEMPS TOTAL D'ACCES AU PFS ---");
+	}
 
 	/**
 	 * Question 5
 	 */
-	private static void getTotalDurationIDLE(JavaPairRDD<String, String> data) {}
+	private static void getTotalDurationIDLE(JavaPairRDD<String, String> data) {
+		System.out.println("--- TEMPS TOTAL EN IDLE DU SYSTEME ---");
+	}
 
 	/**
 	 * Question 6.a
 	 */
-	private static void getDistribOfTotalTimeWithAPatternAlone(JavaPairRDD<String, String> data) {}
+	private static void getDistribOfTotalTimeWithAPatternAlone(JavaPairRDD<String, String> data) {
+		System.out.println("--- POURCENTAGE DU TEMPS TOTAL DES PHASES OU CHAQUE PATTERN A ETE OBSERVE SEUL OU CONCURRENT A DES AUTRES ---");
+	}
 
 	/**
 	 * Question 6.b
 	 */
-	private static void getTop10patterns(JavaPairRDD<String, String> data) {}
+	private static void getTop10patterns(JavaPairRDD<String, String> data) {
+		System.out.println("--- TOP 10 DES PATTERNS EN REPRESENTATIVITE ---");
+	}
 
 	/**
 	 * Question 7
 	 */
 	private static void getLinesMatchingWithPatterns(JavaPairRDD<String, String> data) {
-		JavaPairRDD<String, String> filtered = data.filter(filterMatchingPatterns);
-		System.out.println("---------------NOMBRE DE DONNEES: " + data.count());
-		System.out.println("---------------NOMBRE DE DONNEES FILTREE: " + filtered.count());
+		JavaPairRDD<String, String> filteredData = data.filter(filterMatchingPatterns);
+		System.out.println("--- PLAGES HORAIRES QUI COMPORTENT LES 4 PATTERNS SUIVANTS : " + String.join(",", target_patterns) +" ---");
+		System.out.println("Nombre de plages horaires correspondantes: " + filteredData.count() + " sur " + data.count());
 	}
 
 	/**
@@ -223,8 +275,6 @@ public class MainPLE {
 					System.out.println("Valid arguments : " + String.join(" | ", argsPossibilities));
 					break;
 			}
-			System.out.println("---------------NOMBRE DE DONNEES RDD : " + (rdd.count() -1)); // -1 is the first line with CSV headers
-			System.out.println("---------------NOMBRE DE PARTITIONS RDD : " + rdd.getNumPartitions());
 			context.close();
 		} else {
 			System.out.println("Expected at least 1 argument matching with : " + String.join(" | ", argsPossibilities));
