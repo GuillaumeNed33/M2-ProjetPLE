@@ -9,6 +9,8 @@ import org.apache.spark.api.java.function.DoubleFunction;
 import org.apache.spark.api.java.function.Function;
 import scala.Tuple2;
 
+import java.text.DecimalFormat;
+import java.text.NumberFormat;
 import java.util.*;
 
 public class MainPLE {
@@ -94,24 +96,59 @@ public class MainPLE {
 	 * Display distribution ( Minimum, Maximum, Moyenne, Médiane, premier quadrants, troisième quadrants, histogramme )
 	 */
 	private static void displayDistribution(JavaDoubleRDD data) {
-		List<Double> dataList = new ArrayList<>(data.collect());
-		Collections.sort(dataList);
-		System.out.println(dataList);
+		NumberFormat formatter = new DecimalFormat("0.#E0");
+		double min = 0;
+		double max = 0;
+		double mean = 0;
+		double median = 0;
+		double firstQuartile = 0;
+		double thirdQuartile = 0;
+		long[] values = {};
+		double[] intervalsForDuration = {
+				1.0,
+				1.0E2,
+				1.0E3,
+				5.0E3,
+				1.0E4,
+				2.5E4,
+				5.0E4,
+				7.5E4,
+				1.0E5,
+				5.0E5,
+				1.0E6,
+				1.0E7,
+				1.0E8,
+				2.0E9,
+				2.0E10
+		};
 
-		int indexMedian = (data.count() % 2 == 0) ? ((int)(data.count()/2)) : (int) ((data.count() + 1) / 2);
-		double median = (data.count() % 2 == 0) ? (dataList.get(indexMedian) + dataList.get(indexMedian+1))/2 : dataList.get(indexMedian);
-		int oneQuarter = (int)Math.ceil(data.count()/4.); //Calculate the number of value in one quarter
-		int threeQuarter = (int)Math.ceil(3*data.count()/4.); //Calculate the number of value in three quarter
-		double firstQuartile = dataList.get(oneQuarter); //Max value of 25% of dataset
-		double thirdQuartile = dataList.get(threeQuarter); //Max value of 75% of dataset
+		if(data.count() > 0) {
+			List<Double> dataList = new ArrayList<>(data.collect());
+			Collections.sort(dataList);
 
-		System.out.println("Minimum:      " + data.min());
-		System.out.println("Maximum:      " + data.max());
-		System.out.println("Moyenne:     " + data.mean());
+			min = data.min();
+			max = data.max();
+			mean = data.mean();
+
+			int indexMedian = (data.count() % 2 == 0) ? ((int) (data.count() / 2)-1) : (int) (((data.count() + 1) / 2)-1);
+			median = (data.count() % 2 == 0) ? (dataList.get(indexMedian) + dataList.get(indexMedian + 1)) / 2 : dataList.get(indexMedian);
+
+			int oneQuarter = (int) Math.ceil(data.count() / 4.); // Calculate the number of value in one quarter
+			int threeQuarter = (int) Math.ceil(3 * data.count() / 4.); // Calculate the number of value in three quarter
+			firstQuartile = dataList.get(oneQuarter); // Max value of 25% of dataset
+			thirdQuartile = dataList.get(threeQuarter); // Max value of 75% of dataset
+			values = data.histogram(intervalsForDuration);
+		}
+		System.out.println("Minimum:      " + min);
+		System.out.println("Maximum:      " + max);
+		System.out.println("Moyenne:     " + mean);
 		System.out.println("Médiane:     " + median);
 		System.out.println("Premier quartile:     " + firstQuartile);
 		System.out.println("Troisième quartile:     " + thirdQuartile);
-		System.out.println("Histogramme:	\n" + data.histogram(10));
+		System.out.println("Histogramme (microsecondes):	");
+		for(int i=0; i < values.length; i++) {
+			System.out.println("Entre " + formatter.format(intervalsForDuration[i]) + " et " + formatter.format(intervalsForDuration[i+1]) + " :		" + values[i]);
+		}
 	}
 
 	/**
@@ -140,15 +177,25 @@ public class MainPLE {
 
 	/**
 	 * Question 1.c
-	 * @param pattern targeted pattern
 	 */
-	private static void getDistribOfDurationAlonePattern(JavaPairRDD<String, String> data, String pattern) {
-		patterns_selected = pattern; //Save the pattern to allow access to it  in filterAlonePattern method
-		JavaPairRDD<String, String> filteredData = data.filter(filterAlonePattern);
-		JavaDoubleRDD dataForStats = filteredData.mapToDouble(mappingDurationForStats);
-		System.out.println("--- DISTRIBUTION DES DUREES OU LE PATTERN " + pattern + " APPARAIT SEUL ---");
-		System.out.println("Nombre de plages horaires correspondantes: " + filteredData.count() + " sur " + data.count());
-		displayDistribution(dataForStats);
+	private static void getDistribOfDurationAlonePattern(JavaPairRDD<String, String> data) {
+		Map<String, JavaPairRDD<String, String>> allFilteredData = new TreeMap<>();
+		Map<String, JavaDoubleRDD> allDataForStats = new TreeMap<>();
+		for (int i = 0; i < 22; i++) {
+			patterns_selected = Integer.toString(i); //Save the pattern to allow access to it  in filterAlonePattern method
+			JavaPairRDD<String, String> filteredData = data.filter(filterAlonePattern);
+			JavaDoubleRDD dataForStats = filteredData.mapToDouble(mappingDurationForStats);
+			allFilteredData.put(Integer.toString(i), filteredData);
+			allDataForStats.put(Integer.toString(i), dataForStats);
+		}
+
+		for (int i = 0; i < 22; i++) {
+			System.out.println("--- DISTRIBUTION DES DUREES OU LE PATTERN " + i + " APPARAIT SEUL ---");
+			System.out.println("Nombre de plages horaires correspondantes: " + allFilteredData.get(Integer.toString(i)).count() + " sur " + data.count());
+			if(allFilteredData.get(Integer.toString(i)).count() > 0) {
+				displayDistribution(allDataForStats.get(Integer.toString(i)));
+			}
+		}
 	}
 
 	/**
@@ -236,10 +283,7 @@ public class MainPLE {
 					getDistribOfDurationIDLE(data);
 					break;
 				case "1c":
-					//Foreach pattern
-					for (int i = 0; i < 22; i++) {
-						getDistribOfDurationAlonePattern(data, Integer.toString(i));
-					}
+					getDistribOfDurationAlonePattern(data);
 					break;
 				case "2a":
 					getDistribOfNbPatternsPerPhase(data);
