@@ -14,9 +14,11 @@ import java.text.NumberFormat;
 import java.util.*;
 
 public class MainPLE {
+	public static final String RESET_COLOR = "\033[0m";  // Text Reset
+	public static final String COLOR_RED_BACKGROUND = "\033[41m";  // Text Reset
 
-	private static final String PHASES_FILE_URL = "/user/gnedelec001/phasesHead1Go.csv";
-	//private static final String PHASES_FILE_URL = "/user/gnedelec001/phasesHead10Go.csv";
+	//private static final String PHASES_FILE_URL = "/user/gnedelec001/phasesHead1Go.csv";
+	private static final String PHASES_FILE_URL = "/user/gnedelec001/phasesHead10Go.csv";
 	//private static final String PHASES_FILE_URL = "/user/gnedelec001/phasesTail1Go.csv";
 	//private static final String PHASES_FILE_URL = "/user/gnedelec001/phasesTail10Go.csv";
 	//private static final String PHASES_FILE_URL = "/raw_data/ALCF_repo/phases.csv";
@@ -97,13 +99,12 @@ public class MainPLE {
 	 */
 	private static void displayDistribution(JavaDoubleRDD data) {
 		NumberFormat formatter = new DecimalFormat("0.#E0");
-		double min = 0;
-		double max = 0;
-		double mean = 0;
+		double min = data.min();
+		double max = data.max();
+		double mean = data.mean();
 		double median = 0;
 		double firstQuartile = 0;
 		double thirdQuartile = 0;
-		long[] values = {};
 		double[] intervalsForDuration = {
 				1.0,
 				1.0E2,
@@ -121,14 +122,11 @@ public class MainPLE {
 				2.0E9,
 				2.0E10
 		};
+		long[] values = data.histogram(intervalsForDuration);
 
 		if(data.count() > 0) {
 			List<Double> dataList = new ArrayList<>(data.collect());
 			Collections.sort(dataList);
-
-			min = data.min();
-			max = data.max();
-			mean = data.mean();
 
 			int indexMedian = (data.count() % 2 == 0) ? ((int) (data.count() / 2)-1) : (int) (((data.count() + 1) / 2)-1);
 			median = (data.count() % 2 == 0) ? (dataList.get(indexMedian) + dataList.get(indexMedian + 1)) / 2 : dataList.get(indexMedian);
@@ -137,17 +135,16 @@ public class MainPLE {
 			int threeQuarter = (int) Math.ceil(3 * data.count() / 4.); // Calculate the number of value in three quarter
 			firstQuartile = dataList.get(oneQuarter); // Max value of 25% of dataset
 			thirdQuartile = dataList.get(threeQuarter); // Max value of 75% of dataset
-			values = data.histogram(intervalsForDuration);
 		}
-		System.out.println("Minimum:      " + min);
-		System.out.println("Maximum:      " + max);
-		System.out.println("Moyenne:     " + mean);
-		System.out.println("Médiane:     " + median);
-		System.out.println("Premier quartile:     " + firstQuartile);
-		System.out.println("Troisième quartile:     " + thirdQuartile);
-		System.out.println("Histogramme (microsecondes):	");
+		System.out.println(COLOR_RED_BACKGROUND + "Minimum:      " + min + RESET_COLOR);
+		System.out.println(COLOR_RED_BACKGROUND + "Maximum:      " + max + RESET_COLOR);
+		System.out.println(COLOR_RED_BACKGROUND + "Moyenne:     " + mean + RESET_COLOR);
+		System.out.println(COLOR_RED_BACKGROUND + "Médiane:     " + median + RESET_COLOR);
+		System.out.println(COLOR_RED_BACKGROUND + "Premier quartile:     " + firstQuartile + RESET_COLOR);
+		System.out.println(COLOR_RED_BACKGROUND + "Troisième quartile:     " + thirdQuartile + RESET_COLOR);
+		System.out.println(COLOR_RED_BACKGROUND + "Histogramme (microsecondes):	" + RESET_COLOR);
 		for(int i=0; i < values.length; i++) {
-			System.out.println("Entre " + formatter.format(intervalsForDuration[i]) + " et " + formatter.format(intervalsForDuration[i+1]) + " :		" + values[i]);
+			System.out.println(COLOR_RED_BACKGROUND + "Entre " + formatter.format(intervalsForDuration[i]) + " et " + formatter.format(intervalsForDuration[i+1]) + " :		" + values[i] + RESET_COLOR);
 		}
 	}
 
@@ -158,8 +155,8 @@ public class MainPLE {
 		JavaPairRDD<String, String> filteredData = data.filter(filterNotIDLE);
 		JavaDoubleRDD dataForStats = filteredData.mapToDouble(mappingDurationForStats);
 
-		System.out.println("--- DISTRIBUTION DES DUREES DES PHASES NON IDLE ---");
-		System.out.println("Nombre de plages horaires correspondantes: " + filteredData.count() + " sur " + data.count());
+		System.out.println(COLOR_RED_BACKGROUND + "--- DISTRIBUTION DES DUREES DES PHASES NON IDLE ---" + RESET_COLOR);
+		System.out.println(COLOR_RED_BACKGROUND + "Nombre de plages horaires correspondantes: " + filteredData.count() + " sur " + (data.count()-1) + RESET_COLOR);
 		displayDistribution(dataForStats);
 	}
 
@@ -170,8 +167,8 @@ public class MainPLE {
 		JavaPairRDD<String, String> filteredData = data.filter(filterIDLE);
 		JavaDoubleRDD dataForStats = filteredData.mapToDouble(mappingDurationForStats);
 
-		System.out.println("--- DISTRIBUTION DES DUREES DES PHASES IDLE ---");
-		System.out.println("Nombre de plages horaires correspondantes: " + filteredData.count() + " sur " + data.count());
+		System.out.println(COLOR_RED_BACKGROUND + "--- DISTRIBUTION DES DUREES DES PHASES IDLE ---" + RESET_COLOR);
+		System.out.println(COLOR_RED_BACKGROUND + "Nombre de plages horaires correspondantes: " + filteredData.count() + " sur " + (data.count()-1) + RESET_COLOR);
 		displayDistribution(dataForStats);
 	}
 
@@ -190,8 +187,8 @@ public class MainPLE {
 		}
 
 		for (int i = 0; i < 22; i++) {
-			System.out.println("--- DISTRIBUTION DES DUREES OU LE PATTERN " + i + " APPARAIT SEUL ---");
-			System.out.println("Nombre de plages horaires correspondantes: " + allFilteredData.get(Integer.toString(i)).count() + " sur " + data.count());
+			System.out.println(COLOR_RED_BACKGROUND + "--- DISTRIBUTION DES DUREES OU LE PATTERN " + i + " APPARAIT SEUL ---" + RESET_COLOR);
+			System.out.println(COLOR_RED_BACKGROUND + "Nombre de plages horaires correspondantes: " + allFilteredData.get(Integer.toString(i)).count() + " sur " + (data.count()-1) + RESET_COLOR);
 			if(allFilteredData.get(Integer.toString(i)).count() > 0) {
 				displayDistribution(allDataForStats.get(Integer.toString(i)));
 			}
@@ -203,8 +200,8 @@ public class MainPLE {
 	 */
 	private static void getDistribOfNbPatternsPerPhase(JavaPairRDD<String, String> data) {
 		JavaPairRDD<String, String> filteredData = data.filter(filterNotIDLE);
-		System.out.println("--- DISTRIBUTION DES NPATTERNS DES PHASES NON IDLE ---");
-		System.out.println("Nombre de plages horaires correspondantes: " + filteredData.count() + " sur " + data.count());
+		System.out.println(COLOR_RED_BACKGROUND + "--- DISTRIBUTION DES NPATTERNS DES PHASES NON IDLE ---" + RESET_COLOR);
+		System.out.println(COLOR_RED_BACKGROUND + "Nombre de plages horaires correspondantes: " + filteredData.count() + " sur " + (data.count()-1) + RESET_COLOR);
 	}
 
 	/**
@@ -212,43 +209,46 @@ public class MainPLE {
 	 */
 	private static void getDistribOfNbJobsPerPhase(JavaPairRDD<String, String> data) {
 		JavaPairRDD<String, String> filteredData = data.filter(filterNotIDLE);
-		System.out.println("--- DISTRIBUTION DES NJOBS DES PHASES NON IDLE ---");
-		System.out.println("Nombre de plages horaires correspondantes: " + filteredData.count() + " sur " + data.count());
+		System.out.println(COLOR_RED_BACKGROUND + "--- DISTRIBUTION DES NJOBS DES PHASES NON IDLE ---" + RESET_COLOR);
+		System.out.println(COLOR_RED_BACKGROUND + "Nombre de plages horaires correspondantes: " + filteredData.count() + " sur " + (data.count()-1) + RESET_COLOR);
 	}
 
 	/**
 	 * Question 4.a
 	 */
 	private static void getDistribOfTotalPFSAccessPerJob(JavaPairRDD<String, String> data) {
-		System.out.println("--- DISTRIBUTION DU TEMPS TOTAL D'ACCES AU PFS PAR JOB ---");
+		System.out.println(COLOR_RED_BACKGROUND + "--- DISTRIBUTION DU TEMPS TOTAL D'ACCES AU PFS PAR JOB ---" + RESET_COLOR);
 	}
 
 	/**
 	 * Question 4.b
 	 */
 	private static void getTop10JobsTotalPFSAccess(JavaPairRDD<String, String> data) {
-		System.out.println("--- TOP 10 DES JOBS EN TEMPS TOTAL D'ACCES AU PFS ---");
+		System.out.println(COLOR_RED_BACKGROUND + "--- TOP 10 DES JOBS EN TEMPS TOTAL D'ACCES AU PFS ---" + RESET_COLOR);
 	}
 
 	/**
 	 * Question 5
 	 */
 	private static void getTotalDurationIDLE(JavaPairRDD<String, String> data) {
-		System.out.println("--- TEMPS TOTAL EN IDLE DU SYSTEME ---");
+		JavaPairRDD<String, String> filteredData = data.filter(filterIDLE);
+		JavaDoubleRDD dataForStats = filteredData.mapToDouble(mappingDurationForStats);
+		System.out.println(COLOR_RED_BACKGROUND + "--- TEMPS TOTAL EN IDLE DU SYSTEME ---" + RESET_COLOR);
+		System.out.println(COLOR_RED_BACKGROUND + "Resultat en microsecondes:	" + dataForStats.sum() + RESET_COLOR);
 	}
 
 	/**
 	 * Question 6.a
 	 */
 	private static void getDistribOfTotalTimeWithAPatternAlone(JavaPairRDD<String, String> data) {
-		System.out.println("--- POURCENTAGE DU TEMPS TOTAL DES PHASES OU CHAQUE PATTERN A ETE OBSERVE SEUL OU CONCURRENT A DES AUTRES ---");
+		System.out.println(COLOR_RED_BACKGROUND + "--- POURCENTAGE DU TEMPS TOTAL DES PHASES OU CHAQUE PATTERN A ETE OBSERVE SEUL OU CONCURRENT A DES AUTRES ---" + RESET_COLOR);
 	}
 
 	/**
 	 * Question 6.b
 	 */
 	private static void getTop10patterns(JavaPairRDD<String, String> data) {
-		System.out.println("--- TOP 10 DES PATTERNS EN REPRESENTATIVITE ---");
+		System.out.println(COLOR_RED_BACKGROUND + "--- TOP 10 DES PATTERNS EN REPRESENTATIVITE ---" + RESET_COLOR);
 	}
 
 	/**
@@ -256,8 +256,8 @@ public class MainPLE {
 	 */
 	private static void getLinesMatchingWithPatterns(JavaPairRDD<String, String> data) {
 		JavaPairRDD<String, String> filteredData = data.filter(filterMatchingPatterns);
-		System.out.println("--- PLAGES HORAIRES QUI COMPORTENT LES 4 PATTERNS SUIVANTS : " + String.join(",", target_patterns) +" ---");
-		System.out.println("Nombre de plages horaires correspondantes: " + filteredData.count() + " sur " + data.count());
+		System.out.println(COLOR_RED_BACKGROUND + "--- PLAGES HORAIRES QUI COMPORTENT LES 4 PATTERNS SUIVANTS : " + String.join(",", target_patterns) +" ---" + RESET_COLOR);
+		System.out.println(COLOR_RED_BACKGROUND + "Nombre de plages horaires correspondantes: " + filteredData.count() + " sur " + (data.count()-1) + RESET_COLOR);
 	}
 
 	/**
@@ -273,7 +273,12 @@ public class MainPLE {
 			// Mapping lines with :
 			// KEY = timestamp_start/timestamp_end
 			// VALUE = duration/patterns/npatterns/jobs/njobs/days/ndays
-			JavaPairRDD<String, String> data = rdd.mapToPair(s -> new Tuple2<String, String>(s[0] + "/" + s[1], s[2] + "/" + s[3] + "/" + s[4] + "/" + s[5] + "/" + s[6] + "/" + s[7] + "/" + s[8]));
+			JavaPairRDD<String, String> data = rdd.mapToPair(s ->
+					new Tuple2<String, String>(
+							s[0] + "/" + s[1],
+							s[2] + "/" + s[3] + "/" + s[4] + "/" + s[5] + "/" + s[6] + "/" + s[7] + "/" + s[8]
+					)
+			);
 
 			switch (args[0]) {
 				case "1a":
