@@ -45,7 +45,7 @@ public class MainPLE {
 	 */
 	private static Function<Tuple2<String, String>, Boolean> filterNotIDLE = new Function<Tuple2<String, String>, Boolean>() {
 		@Override
-		public Boolean call(Tuple2<String, String> data) throws Exception {
+		public Boolean call(Tuple2<String, String> data) {
 			String[] patterns = data._2().split("/")[1].split(",");
 			return !Arrays.asList(patterns).contains("-1") && !Arrays.asList(patterns).contains("phases");
 		}
@@ -56,7 +56,7 @@ public class MainPLE {
 	 */
 	private static Function<Tuple2<String, String>, Boolean> filterAlonePattern = new Function<Tuple2<String, String>, Boolean>() {
 		@Override
-		public Boolean call(Tuple2<String, String> data) throws Exception {
+		public Boolean call(Tuple2<String, String> data) {
 			String[] patterns = data._2().split("/")[1].split(",");
 			return patterns.length == 1 && patterns[0].equals(patterns_selected);
 		}
@@ -67,7 +67,7 @@ public class MainPLE {
 	 */
 	private static Function<Tuple2<String, String>, Boolean> filterMatchingPatterns = new Function<Tuple2<String, String>, Boolean>() {
 		@Override
-		public Boolean call(Tuple2<String, String> data) throws Exception {
+		public Boolean call(Tuple2<String, String> data) {
 			String[] patterns = data._2().split("/")[1].split(",");
 			boolean allAreMatching = true;
 			int i = 0;
@@ -274,7 +274,7 @@ public class MainPLE {
 			// KEY = timestamp_start/timestamp_end
 			// VALUE = duration/patterns/npatterns/jobs/njobs/days/ndays
 			JavaPairRDD<String, String> data = rdd.mapToPair(s ->
-					new Tuple2<String, String>(
+					new Tuple2<>(
 							s[0] + "/" + s[1],
 							s[2] + "/" + s[3] + "/" + s[4] + "/" + s[5] + "/" + s[6] + "/" + s[7] + "/" + s[8]
 					)
