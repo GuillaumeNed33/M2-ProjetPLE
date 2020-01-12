@@ -248,22 +248,34 @@ public class MainPLE {
 	 * Question 4.a et 4.b
 	 */
 	private static void getDistribOfTotalPFSAccessPerJob(JavaPairRDD<String, String> data) {
-		TreeMap<String, Double> top10 = new TreeMap<>();
+		TreeMap<Double, String> top10 = new TreeMap<>();
 
 		//Question 4.a
-		System.out.println(COLOR_RED_BACKGROUND + "--- DISTRIBUTION DU TEMPS TOTAL D'ACCES AU PFS PAR JOB ---" + RESET_COLOR);
-		top10.put("key", 1.);
-		if(top10.size() > 10) {
-			top10.remove(top10.firstKey());
+		for(int i = 0; i < 10; i++) {
+			System.out.println(COLOR_RED_BACKGROUND + "--- DISTRIBUTION DU TEMPS TOTAL D'ACCES AU PFS PAR JOB ---" + RESET_COLOR);
+			double key = 1.;
+			if (top10.containsKey(key)) {
+				String previousPattern = top10.get(key);
+				top10.put(key, previousPattern + "," + "");
+			} else {
+				top10.put(key, "");
+			}
+			if (top10.size() > 10) {
+				top10.remove(top10.firstKey());
+			}
 		}
 
 		//Question 4.b
 		System.out.println(COLOR_RED_BACKGROUND + "--- TOP 10 DES JOBS EN TEMPS TOTAL D'ACCES AU PFS ---" + RESET_COLOR);
 		int position = 10;
-		for (Map.Entry<String, Double> entry : top10.entrySet()) {
-			double topPercent = entry.getValue();
-			String topJob = entry.getKey();
-			System.out.println(COLOR_RED_BACKGROUND + position + " : Job " + HIGHLIGHT_COLOR + topJob + RESET_COLOR + COLOR_RED_BACKGROUND + " avec " + topPercent + "%" + RESET_COLOR);
+		for (Map.Entry<Double, String> entry : top10.entrySet()) {
+			double topPercent = entry.getKey();
+			String topJob = entry.getValue();
+			String egalite = "";
+			if(topJob.split(",").length > 1) {
+				egalite = "[EGALITE]";
+			}
+			System.out.println(COLOR_RED_BACKGROUND + position + egalite + " : Pattern " + HIGHLIGHT_COLOR + topJob + RESET_COLOR + COLOR_RED_BACKGROUND + " avec " + topPercent + "% du temps total." + RESET_COLOR);
 			position--;
 		}
 	}
@@ -282,7 +294,7 @@ public class MainPLE {
 	 * Question 6.a et 6.b
 	 */
 	private static void getPercentOfTotalTimeWhereAPatternIsAlone(JavaPairRDD<String, String> data) {
-		TreeMap<String, Double> top10 = new TreeMap<>();
+		TreeMap<Double, String> top10 = new TreeMap<>();
 		JavaDoubleRDD allForStats = data.mapToDouble(mappingDurationForStats);
 
 		//Question 6.a
@@ -291,7 +303,14 @@ public class MainPLE {
 			JavaPairRDD<String, String> filteredData = data.filter(filterAlonePattern);
 			JavaDoubleRDD dataForStats = filteredData.mapToDouble(mappingDurationForStats);
 			double percentage = dataForStats.sum() / allForStats.sum() * 100;
-			top10.put(Integer.toString(i), percentage);
+			//Manage key duplication (2 patterns with the same percent)
+			if(top10.containsKey(percentage)) {
+				String previousPattern = top10.get(percentage);
+				top10.put(percentage, previousPattern + "," + i);
+			} else {
+				top10.put(percentage, Integer.toString(i));
+			}
+
 			if(top10.size() > 10) {
 				top10.remove(top10.firstKey());
 			}
@@ -304,10 +323,14 @@ public class MainPLE {
 		//Question 6b
 		System.out.println(COLOR_RED_BACKGROUND + "--- TOP 10 DES PATTERNS EN REPRESENTATIVITE ---" + RESET_COLOR);
 		int position = 10;
-		for (Map.Entry<String, Double> entry : top10.entrySet()) {
-			double topPercent = entry.getValue();
-			String topPattern = entry.getKey();
-			System.out.println(COLOR_RED_BACKGROUND + position + " : Pattern " + HIGHLIGHT_COLOR + topPattern + RESET_COLOR + COLOR_RED_BACKGROUND + " avec " + topPercent + "% du temps total." + RESET_COLOR);
+		for (Map.Entry<Double, String> entry : top10.entrySet()) {
+			double topPercent = entry.getKey();
+			String topPattern = entry.getValue();
+			String egalite = "";
+			if(topPattern.split(",").length > 1) {
+				egalite = "[EGALITE]";
+			}
+			System.out.println(COLOR_RED_BACKGROUND + position + egalite + " : Pattern " + HIGHLIGHT_COLOR + topPattern + RESET_COLOR + COLOR_RED_BACKGROUND + " avec " + topPercent + "% du temps total." + RESET_COLOR);
 			position--;
 		}
 	}
