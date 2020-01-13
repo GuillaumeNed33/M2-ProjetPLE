@@ -15,15 +15,17 @@ import java.text.NumberFormat;
 import java.util.*;
 
 public class MainPLE {
+	//TODO: transformer les System.out en fichier de sortie
 	public static final String RESET_COLOR = "\033[0m";
 	public static final String COLOR_RED_BACKGROUND = "\033[41m";
 	public static final String HIGHLIGHT_COLOR = "\033[4;32m";
 
-	//private static final String PHASES_FILE_URL = "/user/gnedelec001/phasesHead1Go.csv";
-	private static final String PHASES_FILE_URL = "/user/gnedelec001/phasesHead10Go.csv";
+	private static final String PHASES_FILE_URL = "/user/gnedelec001/phasesHead1Go.csv";
+	//private static final String PHASES_FILE_URL = "/user/gnedelec001/phasesHead10Go.csv";
 	//private static final String PHASES_FILE_URL = "/user/gnedelec001/phasesTail1Go.csv";
 	//private static final String PHASES_FILE_URL = "/user/gnedelec001/phasesTail10Go.csv";
 	//private static final String PHASES_FILE_URL = "/raw_data/ALCF_repo/phases.csv";
+	//TODO: utiliser les fichiers jobs.csv et patterns.csv
 	private static final String JOBS_FILE_URL = "/raw_data/ALCF_repo/jobs.csv";
 	private static final String PATTERNS_FILE_URL = "/raw_data/ALCF_repo/patterns.csv";
 
@@ -31,6 +33,7 @@ public class MainPLE {
 	private static String[] target_patterns;
 	private static String patterns_selected;
 	private static final double[] intervalsForNbPatterns = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22};
+	//TODO: determiner echelle pour l'histogramme des njobs
 	private static final double[] intervalsForNbJobs = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22};
 	private static final double[] intervalsForDuration = {
 			1.0,
@@ -57,7 +60,8 @@ public class MainPLE {
 		@Override
 		public Boolean call(Tuple2<String, String> data) {
 			String[] patterns = data._2().split("/")[1].split(",");
-			return Arrays.asList(patterns).contains("-1") && !Arrays.asList(patterns).contains("phases");
+			return Arrays.asList(patterns).contains("-1") && !Arrays.asList(patterns).contains("phases"); //Dans le sujet l'entete est nommé "patterns" mais "phases" dans le fichier réel.
+
 		}
 	};
 
@@ -68,7 +72,7 @@ public class MainPLE {
 		@Override
 		public Boolean call(Tuple2<String, String> data) {
 			String[] patterns = data._2().split("/")[1].split(",");
-			return !Arrays.asList(patterns).contains("-1") && !Arrays.asList(patterns).contains("phases");
+			return !Arrays.asList(patterns).contains("-1") && !Arrays.asList(patterns).contains("phases"); //Dans le sujet l'entete est nommé "patterns" mais "phases" dans le fichier réel.
 		}
 	};
 
@@ -181,7 +185,6 @@ public class MainPLE {
 	private static void getDistribOfDurationNotIDLE(JavaPairRDD<String, String> data) {
 		JavaPairRDD<String, String> filteredData = data.filter(filterNotIDLE);
 		JavaDoubleRDD dataForStats = filteredData.mapToDouble(mappingDurationForStats);
-
 		System.out.println(COLOR_RED_BACKGROUND + "--- DISTRIBUTION DES DUREES DES PHASES NON IDLE ---" + RESET_COLOR);
 		System.out.println(COLOR_RED_BACKGROUND + "Nombre de plages horaires correspondantes: " + filteredData.count() + " sur " + (data.count()-1) + RESET_COLOR);
 		displayDistribution(dataForStats, intervalsForDuration);
@@ -203,22 +206,13 @@ public class MainPLE {
 	 * Question 1.c
 	 */
 	private static void getDistribOfDurationAlonePattern(JavaPairRDD<String, String> data) {
-		Map<String, JavaPairRDD<String, String>> allFilteredData = new TreeMap<>();
-		Map<String, JavaDoubleRDD> allDataForStats = new TreeMap<>();
 		for (int i = 0; i < 22; i++) {
 			patterns_selected = Integer.toString(i); //Save the pattern to allow access to it  in filterAlonePattern method
 			JavaPairRDD<String, String> filteredData = data.filter(filterAlonePattern);
 			JavaDoubleRDD dataForStats = filteredData.mapToDouble(mappingDurationForStats);
-			allFilteredData.put(Integer.toString(i), filteredData);
-			allDataForStats.put(Integer.toString(i), dataForStats);
-		}
-
-		for (int i = 0; i < 22; i++) {
 			System.out.println(COLOR_RED_BACKGROUND + "--- DISTRIBUTION DES DUREES OU LE PATTERN " + i + " APPARAIT SEUL ---" + RESET_COLOR);
-			System.out.println(COLOR_RED_BACKGROUND + "Nombre de plages horaires correspondantes: " + allFilteredData.get(Integer.toString(i)).count() + " sur " + (data.count()-1) + RESET_COLOR);
-			if(allFilteredData.get(Integer.toString(i)).count() > 0) {
-				displayDistribution(allDataForStats.get(Integer.toString(i)), intervalsForDuration);
-			}
+			System.out.println(COLOR_RED_BACKGROUND + "Nombre de plages horaires correspondantes: " + filteredData.count() + " sur " + (data.count()-1) + RESET_COLOR);
+			displayDistribution(dataForStats, intervalsForDuration);
 		}
 	}
 
@@ -248,6 +242,7 @@ public class MainPLE {
 	 * Question 4.a et 4.b
 	 */
 	private static void getDistribOfTotalPFSAccessPerJob(JavaPairRDD<String, String> data) {
+		//TODO: question 4.a 4.b
 		TreeMap<Double, String> top10 = new TreeMap<>();
 
 		//Question 4.a

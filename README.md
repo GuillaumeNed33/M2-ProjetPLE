@@ -18,9 +18,9 @@ Pour lancer le programme, executez la commande suivante avec en arguments, le nu
     $ spark-submit \
         --master yarn \
         --deploy-mode cluster \
-        --num-executors 4 \
+        --num-executors 6 \
         --total-executor-cores 8 \
-        --executor-memory 526 \
+        --executor-memory 3G \
         --class bigdata.MainPLE target/ProjetPLE-0.0.1.jar \
         <questionID> <otherArguments>
     
@@ -33,9 +33,9 @@ Les patterns ciblés par le programmes doivent être donnés en arguments avec l
     $ spark-submit \
         --master yarn \
         --deploy-mode cluster \
-        --num-executors 4 \
+        --num-executors 6 \
         --total-executor-cores 8 \
-        --executor-memory 526 \
+        --executor-memory 3G \
         --class bigdata.MainPLE target/ProjetPLE-0.0.1.jar \
         7 1 2 3 4
 
