@@ -13,14 +13,17 @@ import scala.Tuple2;
 import java.text.DecimalFormat;
 import java.text.NumberFormat;
 import java.util.*;
+import java.lang.Math;
 
 public class MainPLE {
+  private static JavaSparkContext context;
+
 	public static final String RESET_COLOR = "\033[0m";
 	public static final String COLOR_RED_BACKGROUND = "\033[41m";
 	public static final String HIGHLIGHT_COLOR = "\033[4;32m";
 
-	//private static final String PHASES_FILE_URL = "/user/gnedelec001/phasesHead1Go.csv";
-	private static final String PHASES_FILE_URL = "/user/gnedelec001/phasesHead10Go.csv";
+	private static final String PHASES_FILE_URL = "/user/gnedelec001/phasesHead1Go.csv";
+	//private static final String PHASES_FILE_URL = "/user/gnedelec001/phasesHead10Go.csv";
 	//private static final String PHASES_FILE_URL = "/user/gnedelec001/phasesTail1Go.csv";
 	//private static final String PHASES_FILE_URL = "/user/gnedelec001/phasesTail10Go.csv";
 	//private static final String PHASES_FILE_URL = "/raw_data/ALCF_repo/phases.csv";
@@ -142,16 +145,39 @@ public class MainPLE {
 	 * Display distribution ( Minimum, Maximum, Moyenne, Médiane, premier quadrants, troisième quadrants, histogramme )
 	 */
 	private static void displayDistribution(JavaDoubleRDD data, double[] intervals) {
+    ArrayList<String> result = new ArrayList<String>();
+ 
 		NumberFormat formatter = new DecimalFormat("0.#E0");
 		double min = data.min();
 		double max = data.max();
 		double mean = data.mean();
-		double median = 0;
-		double firstQuartile = 0;
-		double thirdQuartile = 0;
 		long[] values = data.histogram(intervals);
-
-		if(data.count() > 0) {
+   
+    JavaRDD<String> quartiles = data.flatMap((x) -> {
+      ArrayList<Double> list = new ArrayList<Double>();
+      list.add(x);
+      Collections.sort(list);
+      ArrayList<String> q = new ArrayList<String>();
+      
+      int q11 = (int)(Math.floor(list.size()/4.0));
+      int q12 = (int)(Math.round(list.size()/4.0));
+      double q1 = (list.get(q11) + list.get(q12))/2;
+      q.add(Double.toString(q1));
+      
+      int q21 = (int)(Math.floor(list.size()/2.0));
+      int q22 = (int)(Math.round(list.size()/2.0));
+      double q2 = (list.get(q21) + list.get(q22))/2;
+      q.add(Double.toString(q1));
+      
+      int q31 = (int)(Math.floor(list.size()*0.75));
+      int q32 = (int)(Math.round(list.size()*0.75));
+      double q3 = (list.get(q31) + list.get(q32))/2;
+      q.add(Double.toString(q3));
+      
+      return q.iterator();
+    });
+    
+		/*if(data.count() > 0) {
 			List<Double> dataList = new ArrayList<>(data.collect());
 			Collections.sort(dataList);
 
@@ -162,8 +188,9 @@ public class MainPLE {
 			int threeQuarter = (int) Math.ceil(3 * data.count() / 4.); // Calculate the number of value in three quarter
 			firstQuartile = dataList.get(oneQuarter); // Max value of 25% of dataset
 			thirdQuartile = dataList.get(threeQuarter); // Max value of 75% of dataset
-		}
-		System.out.println(COLOR_RED_BACKGROUND + "Minimum:      " + min + RESET_COLOR);
+		}*/
+   
+		/*System.out.println(COLOR_RED_BACKGROUND + "Minimum:      " + min + RESET_COLOR);
 		System.out.println(COLOR_RED_BACKGROUND + "Maximum:      " + max + RESET_COLOR);
 		System.out.println(COLOR_RED_BACKGROUND + "Moyenne:     " + mean + RESET_COLOR);
 		System.out.println(COLOR_RED_BACKGROUND + "Médiane:     " + median + RESET_COLOR);
@@ -172,19 +199,31 @@ public class MainPLE {
 		System.out.println(COLOR_RED_BACKGROUND + "Histogramme (microsecondes):	" + RESET_COLOR);
 		for(int i=0; i < values.length; i++) {
 			System.out.println(COLOR_RED_BACKGROUND + "Entre " + formatter.format(intervals[i]) + " et " + formatter.format(intervals[i+1]) + " :		" + values[i] + RESET_COLOR);
+		}*/
+    result.add("Min = "+min);
+    result.add("Max = "+max);
+    result.add("Mean = "+mean);
+    result.add("Histogramme :");
+		for(int i=0; i < values.length; i++) {
+			//System.out.println(COLOR_RED_BACKGROUND + "Entre " + formatter.format(intervals[i]) + " et " + formatter.format(intervals[i+1]) + " :		" + values[i] + RESET_COLOR);
+      result.add("Entre " + formatter.format(intervals[i]) + " et " + formatter.format(intervals[i+1]) + " :		" + values[i]);
 		}
+    JavaRDD<String> output = context.parallelize(result);
+    output.saveAsTextFile("/user/dropert/1a1");
+    quartiles.saveAsTextFile("/user/dropert/1a2");
 	}
 
 	/**
 	 * Question 1.a
 	 */
 	private static void getDistribOfDurationNotIDLE(JavaPairRDD<String, String> data) {
+    ArrayList<String> result = new ArrayList<String>();
 		JavaPairRDD<String, String> filteredData = data.filter(filterNotIDLE);
 		JavaDoubleRDD dataForStats = filteredData.mapToDouble(mappingDurationForStats);
 
-		System.out.println(COLOR_RED_BACKGROUND + "--- DISTRIBUTION DES DUREES DES PHASES NON IDLE ---" + RESET_COLOR);
-		System.out.println(COLOR_RED_BACKGROUND + "Nombre de plages horaires correspondantes: " + filteredData.count() + " sur " + (data.count()-1) + RESET_COLOR);
-		displayDistribution(dataForStats, intervalsForDuration);
+		/*System.out.println(COLOR_RED_BACKGROUND + "--- DISTRIBUTION DES DUREES DES PHASES NON IDLE ---" + RESET_COLOR);
+		System.out.println(COLOR_RED_BACKGROUND + "Nombre de plages horaires correspondantes: " + filteredData.count() + " sur " + (data.count()-1) + RESET_COLOR);*/
+    displayDistribution(dataForStats, intervalsForDuration);
 	}
 
 	/**
@@ -351,7 +390,7 @@ public class MainPLE {
 	public static void main(String[] args) {
 		if (args.length > 0 && Arrays.asList(argsPossibilities).contains(args[0])) {
 			SparkConf conf = new SparkConf().setAppName("Projet PLE 2019");
-			JavaSparkContext context = new JavaSparkContext(conf);
+			context = new JavaSparkContext(conf);
 			JavaRDD<String[]> rdd = context.textFile(PHASES_FILE_URL).map(line -> line.split(";"));
 
 			// Mapping lines with :
