@@ -8,6 +8,7 @@ import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.DoubleFunction;
 import org.apache.spark.api.java.function.Function;
+import org.apache.spark.util.StatCounter;
 import scala.Tuple2;
 
 import java.text.DecimalFormat;
@@ -16,23 +17,23 @@ import java.util.*;
 import java.lang.Math;
 
 public class MainPLE {
-  private static JavaSparkContext context;
-	public static final String RESET_COLOR = "\033[0m";
-	public static final String COLOR_RED_BACKGROUND = "\033[41m";
-	public static final String HIGHLIGHT_COLOR = "\033[4;32m";
+	private static JavaSparkContext context;
 
-	private static final String PHASES_FILE_URL = "/user/gnedelec001/phasesHead1Go.csv";
-	//private static final String PHASES_FILE_URL = "/user/gnedelec001/phasesHead10Go.csv";
-	//private static final String PHASES_FILE_URL = "/user/gnedelec001/phasesTail1Go.csv";
-	//private static final String PHASES_FILE_URL = "/user/gnedelec001/phasesTail10Go.csv";
+	private static final String OUTPUT_URL = "/user/gnedelec001/output/";
+	private static final String PHASES_FILE_URL = "/user/gnedelec001/resources/phasesHead1Go.csv";
+	//private static final String PHASES_FILE_URL = "/user/gnedelec001/resources/phasesHead10Go.csv";
+	//private static final String PHASES_FILE_URL = "/user/gnedelec001/resources/phasesTail1Go.csv";
+	//private static final String PHASES_FILE_URL = "/user/gnedelec001/resources/phasesTail10Go.csv";
 	//private static final String PHASES_FILE_URL = "/raw_data/ALCF_repo/phases.csv";
 	//TODO: utiliser les fichiers jobs.csv et patterns.csv
 	private static final String JOBS_FILE_URL = "/raw_data/ALCF_repo/jobs.csv";
 	private static final String PATTERNS_FILE_URL = "/raw_data/ALCF_repo/patterns.csv";
 
+	private static final Integer NUM_PARTITIONS = 1;
 	private static final String[] argsPossibilities= {"1a", "1b", "1c", "2", "3", "4", "5", "6", "7"};
 	private static String[] target_patterns;
 	private static String patterns_selected;
+
 	private static final double[] intervalsForNbPatterns = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22};
 	//TODO: determiner echelle pour l'histogramme des njobs
 	private static final double[] intervalsForNbJobs = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22};
@@ -142,102 +143,74 @@ public class MainPLE {
 		}
 	};
 
-
 	/**
 	 * Display distribution ( Minimum, Maximum, Moyenne, Médiane, premier quadrants, troisième quadrants, histogramme )
 	 */
-	private static void displayDistribution(JavaDoubleRDD data, double[] intervals) {
-    ArrayList<String> result = new ArrayList<String>();
- 
-		NumberFormat formatter = new DecimalFormat("0.#E0");
-		double min = data.min();
-		double max = data.max();
-		double mean = data.mean();
+	private static ArrayList<String> displayDistribution(JavaDoubleRDD data, double[] intervals) {
+		ArrayList<String> result = new ArrayList<>();
+		StatCounter stats = data.stats();
+		long size = stats.count();
+		double min = stats.min();
+		double max = stats.max();
+		double mean = stats.mean();
+		double median = 0;
+		double firstQuartile = 0;
+		double thirdQuartile = 0;
 		long[] values = data.histogram(intervals);
-   
-    JavaRDD<String> quartiles = data.flatMap((x) -> {
-      ArrayList<Double> list = new ArrayList<Double>();
-      list.add(x);
-      Collections.sort(list);
-      ArrayList<String> q = new ArrayList<String>();
-      
-      int q11 = (int)(Math.floor(list.size()/4.0));
-      int q12 = (int)(Math.round(list.size()/4.0));
-      double q1 = (list.get(q11) + list.get(q12))/2;
-      q.add(Double.toString(q1));
-      
-      int q21 = (int)(Math.floor(list.size()/2.0));
-      int q22 = (int)(Math.round(list.size()/2.0));
-      double q2 = (list.get(q21) + list.get(q22))/2;
-      q.add(Double.toString(q1));
-      
-      int q31 = (int)(Math.floor(list.size()*0.75));
-      int q32 = (int)(Math.round(list.size()*0.75));
-      double q3 = (list.get(q31) + list.get(q32))/2;
-      q.add(Double.toString(q3));
-      
-      return q.iterator();
-    });
-    
-		/*if(data.count() > 0) {
-			List<Double> dataList = new ArrayList<>(data.collect());
-			Collections.sort(dataList);
+		NumberFormat formatter = new DecimalFormat("0.#E0");
 
-			int indexMedian = (data.count() % 2 == 0) ? ((int) (data.count() / 2)-1) : (int) (((data.count() + 1) / 2)-1);
-			median = (data.count() % 2 == 0) ? (dataList.get(indexMedian) + dataList.get(indexMedian + 1)) / 2 : dataList.get(indexMedian);
+		if(size > 0) {
+			JavaRDD<Double> sortedData = data.map(duration -> duration).sortBy((Double d) -> d, true, NUM_PARTITIONS);
+			JavaPairRDD<Long, Double> indexes = sortedData.zipWithIndex().mapToPair(Tuple2::swap);
 
-			int oneQuarter = (int) Math.ceil(data.count() / 4.); // Calculate the number of value in one quarter
-			int threeQuarter = (int) Math.ceil(3 * data.count() / 4.); // Calculate the number of value in three quarter
-			firstQuartile = dataList.get(oneQuarter); // Max value of 25% of dataset
-			thirdQuartile = dataList.get(threeQuarter); // Max value of 75% of dataset
-		}*/
-   
-		/*System.out.println(COLOR_RED_BACKGROUND + "Minimum:      " + min + RESET_COLOR);
-		System.out.println(COLOR_RED_BACKGROUND + "Maximum:      " + max + RESET_COLOR);
-		System.out.println(COLOR_RED_BACKGROUND + "Moyenne:     " + mean + RESET_COLOR);
-		System.out.println(COLOR_RED_BACKGROUND + "Médiane:     " + median + RESET_COLOR);
-		System.out.println(COLOR_RED_BACKGROUND + "Premier quartile:     " + firstQuartile + RESET_COLOR);
-		System.out.println(COLOR_RED_BACKGROUND + "Troisième quartile:     " + thirdQuartile + RESET_COLOR);
-		System.out.println(COLOR_RED_BACKGROUND + "Histogramme (microsecondes):	" + RESET_COLOR);
-		for(int i=0; i < values.length; i++) {
-			System.out.println(COLOR_RED_BACKGROUND + "Entre " + formatter.format(intervals[i]) + " et " + formatter.format(intervals[i+1]) + " :		" + values[i] + RESET_COLOR);
-		}*/
-    result.add("Min = "+min);
-    result.add("Max = "+max);
-    result.add("Mean = "+mean);
-    result.add("Histogramme :");
-		for(int i=0; i < values.length; i++) {
-			//System.out.println(COLOR_RED_BACKGROUND + "Entre " + formatter.format(intervals[i]) + " et " + formatter.format(intervals[i+1]) + " :		" + values[i] + RESET_COLOR);
-      result.add("Entre " + formatter.format(intervals[i]) + " et " + formatter.format(intervals[i+1]) + " :		" + values[i]);
+			long indexMedian = (size % 2 == 0) ? ((size / 2) -1) : (((size + 1) / 2)-1);
+			long indexLastOfFirstQuarter = (long) Math.ceil(size / 4.); // Calculate the number of value in one quarter
+			long indexLastOfThirdQuarter = (long) Math.ceil(3 * size / 4.); // Calculate the number of value in three quarter
+
+			median = (size % 2 == 0) ? ( indexes.lookup(indexMedian).get(0) + indexes.lookup(indexMedian + 1).get(0) ) / 2 : indexes.lookup(indexMedian).get(0);
+			firstQuartile = indexes.lookup(indexLastOfFirstQuarter).get(0); // Max value of 25% of dataset
+			thirdQuartile = indexes.lookup(indexLastOfThirdQuarter).get(0); // Max value of 75% of dataset
 		}
-    JavaRDD<String> output = context.parallelize(result);
-    output.saveAsTextFile("/user/dropert/1a1");
-    quartiles.saveAsTextFile("/user/dropert/1a2");
+
+		result.add("Minimum:	" + min);
+		result.add("Maximum:	" + max);
+		result.add("Moyenne:	" + mean);
+		result.add("Mediane:	" + median);
+		result.add("1er Quartile:	" + firstQuartile);
+		result.add("3ème Quartile:	" + thirdQuartile);
+		result.add("Histogramme:	");
+		for(int i=0; i < values.length; i++) {
+			result.add("Entre " + formatter.format(intervals[i]) + " et " + formatter.format(intervals[i+1]) + " :		" + values[i]);
+		}
+		return result;
 	}
 
 	/**
 	 * Question 1.a
 	 */
 	private static void getDistribOfDurationNotIDLE(JavaPairRDD<String, String> data) {
-    ArrayList<String> result = new ArrayList<String>();
+		ArrayList<String> result = new ArrayList<>();
 		JavaPairRDD<String, String> filteredData = data.filter(filterNotIDLE);
 		JavaDoubleRDD dataForStats = filteredData.mapToDouble(mappingDurationForStats);
 
-		/*System.out.println(COLOR_RED_BACKGROUND + "--- DISTRIBUTION DES DUREES DES PHASES NON IDLE ---" + RESET_COLOR);
-		System.out.println(COLOR_RED_BACKGROUND + "Nombre de plages horaires correspondantes: " + filteredData.count() + " sur " + (data.count()-1) + RESET_COLOR);*/
-    displayDistribution(dataForStats, intervalsForDuration);
+		result.add("Nombre de plages horaires correspondantes: " + filteredData.count() + " sur " + (data.count()-1));
+		result.addAll(displayDistribution(dataForStats, intervalsForDuration));
+		JavaRDD<String> output = context.parallelize(result);
+		output.saveAsTextFile(OUTPUT_URL + "1a_DurationDistribution_NotIDLE");
 	}
 
 	/**
 	 * Question 1.b (pattern == -1)
 	 */
 	private static void getDistribOfDurationIDLE(JavaPairRDD<String, String> data) {
+		ArrayList<String> result = new ArrayList<>();
 		JavaPairRDD<String, String> filteredData = data.filter(filterIDLE);
 		JavaDoubleRDD dataForStats = filteredData.mapToDouble(mappingDurationForStats);
 
-		System.out.println(COLOR_RED_BACKGROUND + "--- DISTRIBUTION DES DUREES DES PHASES IDLE ---" + RESET_COLOR);
-		System.out.println(COLOR_RED_BACKGROUND + "Nombre de plages horaires correspondantes: " + filteredData.count() + " sur " + (data.count()-1) + RESET_COLOR);
-		displayDistribution(dataForStats, intervalsForDuration);
+		result.add("Nombre de plages horaires correspondantes: " + filteredData.count() + " sur " + (data.count()-1));
+		result.addAll(displayDistribution(dataForStats, intervalsForDuration));
+		JavaRDD<String> output = context.parallelize(result);
+		output.saveAsTextFile(OUTPUT_URL + "1b_DurationDistribution_IDLE");
 	}
 
 	/**
@@ -245,12 +218,15 @@ public class MainPLE {
 	 */
 	private static void getDistribOfDurationAlonePattern(JavaPairRDD<String, String> data) {
 		for (int i = 0; i < 22; i++) {
+			ArrayList<String> result = new ArrayList<>();
 			patterns_selected = Integer.toString(i); //Save the pattern to allow access to it  in filterAlonePattern method
 			JavaPairRDD<String, String> filteredData = data.filter(filterAlonePattern);
 			JavaDoubleRDD dataForStats = filteredData.mapToDouble(mappingDurationForStats);
-			System.out.println(COLOR_RED_BACKGROUND + "--- DISTRIBUTION DES DUREES OU LE PATTERN " + i + " APPARAIT SEUL ---" + RESET_COLOR);
-			System.out.println(COLOR_RED_BACKGROUND + "Nombre de plages horaires correspondantes: " + filteredData.count() + " sur " + (data.count()-1) + RESET_COLOR);
-			displayDistribution(dataForStats, intervalsForDuration);
+
+			result.add("Nombre de plages horaires correspondantes: " + filteredData.count() + " sur " + (data.count()-1));
+			result.addAll(displayDistribution(dataForStats, intervalsForDuration));
+			JavaRDD<String> output = context.parallelize(result);
+			output.saveAsTextFile(OUTPUT_URL + "1c_DurationDistribution_AlonePattern" + i);
 		}
 	}
 
@@ -258,22 +234,28 @@ public class MainPLE {
 	 * Question 2
 	 */
 	private static void getDistribOfNbPatternsPerPhase(JavaPairRDD<String, String> data) {
+		ArrayList<String> result = new ArrayList<>();
 		JavaPairRDD<String, String> filteredData = data.filter(filterNotIDLE);
 		JavaDoubleRDD dataForStats = filteredData.mapToDouble(mappingNbPatternsForStats);
-		System.out.println(COLOR_RED_BACKGROUND + "--- DISTRIBUTION DES NPATTERNS DES PHASES NON IDLE ---" + RESET_COLOR);
-		System.out.println(COLOR_RED_BACKGROUND + "Nombre de plages horaires correspondantes: " + filteredData.count() + " sur " + (data.count()-1) + RESET_COLOR);
-		displayDistribution(dataForStats, intervalsForNbPatterns);
+
+		result.add("Nombre de plages horaires correspondantes: " + filteredData.count() + " sur " + (data.count()-1));
+		result.addAll(displayDistribution(dataForStats, intervalsForNbPatterns));
+		JavaRDD<String> output = context.parallelize(result);
+		output.saveAsTextFile(OUTPUT_URL + "2_NbPatternsDistributionPerPhase");
 	}
 
 	/**
 	 * Question 3
 	 */
 	private static void getDistribOfNbJobsPerPhase(JavaPairRDD<String, String> data) {
+		ArrayList<String> result = new ArrayList<>();
 		JavaPairRDD<String, String> filteredData = data.filter(filterNotIDLE);
 		JavaDoubleRDD dataForStats = filteredData.mapToDouble(mappingNbJobsForStats);
-		System.out.println(COLOR_RED_BACKGROUND + "--- DISTRIBUTION DES NJOBS DES PHASES NON IDLE ---" + RESET_COLOR);
-		System.out.println(COLOR_RED_BACKGROUND + "Nombre de plages horaires correspondantes: " + filteredData.count() + " sur " + (data.count()-1) + RESET_COLOR);
-		displayDistribution(dataForStats, intervalsForNbJobs);
+
+		result.add("Nombre de plages horaires correspondantes: " + filteredData.count() + " sur " + (data.count()-1));
+		result.addAll(displayDistribution(dataForStats, intervalsForNbJobs));
+		JavaRDD<String> output = context.parallelize(result);
+		output.saveAsTextFile(OUTPUT_URL + "3_NbJobsDistributionPerPhase");
 	}
 
 	/**
@@ -284,8 +266,9 @@ public class MainPLE {
 		TreeMap<Double, String> top10 = new TreeMap<>();
 
 		//Question 4.a
+		System.out.println("--- DISTRIBUTION DU TEMPS TOTAL D'ACCES AU PFS PAR JOB ---");
 		for(int i = 0; i < 10; i++) {
-			System.out.println(COLOR_RED_BACKGROUND + "--- DISTRIBUTION DU TEMPS TOTAL D'ACCES AU PFS PAR JOB ---" + RESET_COLOR);
+			ArrayList<String> result = new ArrayList<>();
 			double key = 1.;
 			if (top10.containsKey(key)) {
 				String previousPattern = top10.get(key);
@@ -296,10 +279,13 @@ public class MainPLE {
 			if (top10.size() > 10) {
 				top10.remove(top10.firstKey());
 			}
+			//result.add("Resultat du pattern " + i + " en millisecondes: " +	dataForStats.stats().sum() + " sur " + allForStats.stats().sum() + ". Soit " + percentage + "% du temps total des phases");
+			JavaRDD<String> output = context.parallelize(result);
+			output.saveAsTextFile(OUTPUT_URL + "4a_distribOfTotalPFSAccessPerJob_" + i);
 		}
 
 		//Question 4.b
-		System.out.println(COLOR_RED_BACKGROUND + "--- TOP 10 DES JOBS EN TEMPS TOTAL D'ACCES AU PFS ---" + RESET_COLOR);
+		ArrayList<String> resultTop10 = new ArrayList<>();
 		int position = 10;
 		for (Map.Entry<Double, String> entry : top10.entrySet()) {
 			double topPercent = entry.getKey();
@@ -308,19 +294,24 @@ public class MainPLE {
 			if(topJob.split(",").length > 1) {
 				egalite = "[EGALITE]";
 			}
-			System.out.println(COLOR_RED_BACKGROUND + position + egalite + " : Pattern " + HIGHLIGHT_COLOR + topJob + RESET_COLOR + COLOR_RED_BACKGROUND + " avec " + topPercent + "% du temps total." + RESET_COLOR);
+			resultTop10.add(position + egalite + " : Pattern " + topJob+ " avec " + topPercent + "% du temps total.");
 			position--;
 		}
+		JavaRDD<String> output = context.parallelize(resultTop10);
+		output.saveAsTextFile(OUTPUT_URL + "4b_top10TotalPFSAccess");
 	}
 
 	/**
 	 * Question 5
 	 */
 	private static void getTotalDurationIDLE(JavaPairRDD<String, String> data) {
+		ArrayList<String> result = new ArrayList<>();
 		JavaPairRDD<String, String> filteredData = data.filter(filterIDLE);
 		JavaDoubleRDD dataForStats = filteredData.mapToDouble(mappingDurationForStats);
-		System.out.println(COLOR_RED_BACKGROUND + "--- TEMPS TOTAL EN IDLE DU SYSTEME ---" + RESET_COLOR);
-		System.out.println(COLOR_RED_BACKGROUND + "Resultat en microsecondes:	" + dataForStats.sum() + RESET_COLOR);
+
+		result.add("Resultat en microsecondes:	" + dataForStats.sum());
+		JavaRDD<String> output = context.parallelize(result);
+		output.saveAsTextFile(OUTPUT_URL + "5_getTotalDurationIDLE");
 	}
 
 	/**
@@ -332,6 +323,7 @@ public class MainPLE {
 
 		//Question 6.a
 		for (int i = 0; i < 22; i++) {
+			ArrayList<String> result = new ArrayList<>();
 			patterns_selected = Integer.toString(i); //Save the pattern to allow access to it  in filterAlonePattern method
 			JavaPairRDD<String, String> filteredData = data.filter(filterAlonePattern);
 			JavaDoubleRDD dataForStats = filteredData.mapToDouble(mappingDurationForStats);
@@ -347,14 +339,13 @@ public class MainPLE {
 			if(top10.size() > 10) {
 				top10.remove(top10.firstKey());
 			}
-			System.out.println(COLOR_RED_BACKGROUND + "--- POURCENTAGE DU TEMPS TOTAL DES PHASES OU CHAQUE PATTERN A ETE OBSERVE SEUL OU CONCURRENT A DES AUTRES ---" + RESET_COLOR);
-			System.out.println(COLOR_RED_BACKGROUND + "Resultat du pattern " + HIGHLIGHT_COLOR + i + RESET_COLOR + COLOR_RED_BACKGROUND + " en millisecondes: " +
-					dataForStats.sum() + " sur " + allForStats.sum() +
-					". Soit " + percentage + "% du temps total des phases" + RESET_COLOR);
+			result.add("Resultat du pattern " + i + " en millisecondes: " +	dataForStats.stats().sum() + " sur " + allForStats.stats().sum() + ". Soit " + percentage + "% du temps total des phases");
+			JavaRDD<String> output = context.parallelize(result);
+			output.saveAsTextFile(OUTPUT_URL + "6a_PercentOfTotalTimeForPattern_" + i);
 		}
 
 		//Question 6b
-		System.out.println(COLOR_RED_BACKGROUND + "--- TOP 10 DES PATTERNS EN REPRESENTATIVITE ---" + RESET_COLOR);
+		ArrayList<String> resultTop10 = new ArrayList<>();
 		int position = 10;
 		for (Map.Entry<Double, String> entry : top10.entrySet()) {
 			double topPercent = entry.getKey();
@@ -363,18 +354,27 @@ public class MainPLE {
 			if(topPattern.split(",").length > 1) {
 				egalite = "[EGALITE]";
 			}
-			System.out.println(COLOR_RED_BACKGROUND + position + egalite + " : Pattern " + HIGHLIGHT_COLOR + topPattern + RESET_COLOR + COLOR_RED_BACKGROUND + " avec " + topPercent + "% du temps total." + RESET_COLOR);
+			resultTop10.add(position + egalite + " : Pattern " + topPattern+ " avec " + topPercent + "% du temps total.");
 			position--;
 		}
+		JavaRDD<String> output = context.parallelize(resultTop10);
+		output.saveAsTextFile(OUTPUT_URL + "6b_top10PercentOfTotalTime");
 	}
 
 	/**
 	 * Question 7
 	 */
 	private static void getLinesMatchingWithPatterns(JavaPairRDD<String, String> data) {
+		//TODO: temps linéaire
+		ArrayList<String> result = new ArrayList<>();
 		JavaPairRDD<String, String> filteredData = data.filter(filterMatchingPatterns);
-		System.out.println(COLOR_RED_BACKGROUND + "--- PLAGES HORAIRES QUI COMPORTENT LES 4 PATTERNS SUIVANTS : " + String.join(",", target_patterns) +" ---" + RESET_COLOR);
-		System.out.println(COLOR_RED_BACKGROUND + "Nombre de plages horaires correspondantes: " + filteredData.count() + " sur " + (data.count()-1) + RESET_COLOR);
+
+		result.add("PLAGES HORAIRES QUI COMPORTENT LES 4 PATTERNS SUIVANTS : " + String.join(",", target_patterns));
+		result.add("Nombre de plages horaires correspondantes: " + filteredData.count() + " sur " + (data.count()-1));
+		result.add("------------------------------------------");
+		//TODO: writes all lines
+		JavaRDD<String> output = context.parallelize(result);
+		output.saveAsTextFile(OUTPUT_URL + "7_getLinesMatchingWithPatterns");
 	}
 
 	/**
