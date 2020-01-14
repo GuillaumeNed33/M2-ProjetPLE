@@ -217,6 +217,7 @@ public class MainPLE {
 	 * Question 1.c
 	 */
 	private static void getDistribOfDurationAlonePattern(JavaPairRDD<String, String> data) {
+		//TODO : optimiser le temps de calcul
 		for (int i = 0; i < 22; i++) {
 			ArrayList<String> result = new ArrayList<>();
 			patterns_selected = Integer.toString(i); //Save the pattern to allow access to it  in filterAlonePattern method
@@ -234,12 +235,10 @@ public class MainPLE {
 	 * Question 2
 	 */
 	private static void getDistribOfNbPatternsPerPhase(JavaPairRDD<String, String> data) {
-		ArrayList<String> result = new ArrayList<>();
 		JavaPairRDD<String, String> filteredData = data.filter(filterNotIDLE);
 		JavaDoubleRDD dataForStats = filteredData.mapToDouble(mappingNbPatternsForStats);
 
-		result.add("Nombre de plages horaires correspondantes: " + filteredData.count() + " sur " + (data.count()-1));
-		result.addAll(displayDistribution(dataForStats, intervalsForNbPatterns));
+		ArrayList<String> result = new ArrayList<>(displayDistribution(dataForStats, intervalsForNbPatterns));
 		JavaRDD<String> output = context.parallelize(result);
 		output.saveAsTextFile(OUTPUT_URL + "2_NbPatternsDistributionPerPhase");
 	}
@@ -248,12 +247,10 @@ public class MainPLE {
 	 * Question 3
 	 */
 	private static void getDistribOfNbJobsPerPhase(JavaPairRDD<String, String> data) {
-		ArrayList<String> result = new ArrayList<>();
 		JavaPairRDD<String, String> filteredData = data.filter(filterNotIDLE);
 		JavaDoubleRDD dataForStats = filteredData.mapToDouble(mappingNbJobsForStats);
 
-		result.add("Nombre de plages horaires correspondantes: " + filteredData.count() + " sur " + (data.count()-1));
-		result.addAll(displayDistribution(dataForStats, intervalsForNbJobs));
+		ArrayList<String> result = new ArrayList<>(displayDistribution(dataForStats, intervalsForNbJobs));
 		JavaRDD<String> output = context.parallelize(result);
 		output.saveAsTextFile(OUTPUT_URL + "3_NbJobsDistributionPerPhase");
 	}
@@ -309,7 +306,7 @@ public class MainPLE {
 		JavaPairRDD<String, String> filteredData = data.filter(filterIDLE);
 		JavaDoubleRDD dataForStats = filteredData.mapToDouble(mappingDurationForStats);
 
-		result.add("Resultat en microsecondes:	" + dataForStats.sum());
+		result.add("Resultat en microsecondes:	" + dataForStats.stats().sum());
 		JavaRDD<String> output = context.parallelize(result);
 		output.saveAsTextFile(OUTPUT_URL + "5_getTotalDurationIDLE");
 	}
@@ -319,11 +316,12 @@ public class MainPLE {
 	 */
 	private static void getPercentOfTotalTimeWhereAPatternIsAlone(JavaPairRDD<String, String> data) {
 		TreeMap<Double, String> top10 = new TreeMap<>();
-		JavaDoubleRDD allForStats = data.mapToDouble(mappingDurationForStats);
+		JavaDoubleRDD allForStats = data.filter(filterNotIDLE).mapToDouble(mappingDurationForStats);
 
 		//Question 6.a
+		ArrayList<String> result = new ArrayList<>();
+		//TODO : optimiser le temps de calcul
 		for (int i = 0; i < 22; i++) {
-			ArrayList<String> result = new ArrayList<>();
 			patterns_selected = Integer.toString(i); //Save the pattern to allow access to it  in filterAlonePattern method
 			JavaPairRDD<String, String> filteredData = data.filter(filterAlonePattern);
 			JavaDoubleRDD dataForStats = filteredData.mapToDouble(mappingDurationForStats);
@@ -340,11 +338,12 @@ public class MainPLE {
 				top10.remove(top10.firstKey());
 			}
 			result.add("Resultat du pattern " + i + " en millisecondes: " +	dataForStats.stats().sum() + " sur " + allForStats.stats().sum() + ". Soit " + percentage + "% du temps total des phases");
-			JavaRDD<String> output = context.parallelize(result);
-			output.saveAsTextFile(OUTPUT_URL + "6a_PercentOfTotalTimeForPattern_" + i);
 		}
+		JavaRDD<String> output6a = context.parallelize(result);
+		output6a.saveAsTextFile(OUTPUT_URL + "6a_PercentOfTotalTimeForPattern");
 
 		//Question 6b
+		//TODO plutot que d'utiliser une map, regarder JavaPairRDD::top(int num)
 		ArrayList<String> resultTop10 = new ArrayList<>();
 		int position = 10;
 		for (Map.Entry<Double, String> entry : top10.entrySet()) {
@@ -357,8 +356,8 @@ public class MainPLE {
 			resultTop10.add(position + egalite + " : Pattern " + topPattern+ " avec " + topPercent + "% du temps total.");
 			position--;
 		}
-		JavaRDD<String> output = context.parallelize(resultTop10);
-		output.saveAsTextFile(OUTPUT_URL + "6b_top10PercentOfTotalTime");
+		JavaRDD<String> output6b = context.parallelize(resultTop10);
+		output6b.saveAsTextFile(OUTPUT_URL + "6b_top10PercentOfTotalTime");
 	}
 
 	/**
@@ -366,15 +365,8 @@ public class MainPLE {
 	 */
 	private static void getLinesMatchingWithPatterns(JavaPairRDD<String, String> data) {
 		//TODO: temps linéaire
-		ArrayList<String> result = new ArrayList<>();
 		JavaPairRDD<String, String> filteredData = data.filter(filterMatchingPatterns);
-
-		result.add("PLAGES HORAIRES QUI COMPORTENT LES 4 PATTERNS SUIVANTS : " + String.join(",", target_patterns));
-		result.add("Nombre de plages horaires correspondantes: " + filteredData.count() + " sur " + (data.count()-1));
-		result.add("------------------------------------------");
-		//TODO: writes all lines
-		JavaRDD<String> output = context.parallelize(result);
-		output.saveAsTextFile(OUTPUT_URL + "7_getLinesMatchingWithPatterns");
+		filteredData.saveAsTextFile(OUTPUT_URL + "7_getLinesMatchingWithPatterns_" + String.join("_", target_patterns));
 	}
 
 	/**
