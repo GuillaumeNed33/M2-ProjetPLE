@@ -7,6 +7,7 @@ import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.DoubleFunction;
+import org.apache.spark.api.java.function.PairFunction;
 import org.apache.spark.api.java.function.Function;
 import org.apache.spark.util.StatCounter;
 import scala.Tuple2;
@@ -81,11 +82,22 @@ public class MainPLE {
 	/**
 	 * Return true if patterns column != -1
 	 */
+	private static Function<Tuple2<String, String>, Boolean> isolatePattern = new Function<Tuple2<String, String>, Boolean>() {
+		@Override
+		public Boolean call(Tuple2<String, String> data) {
+			String patterns = data._2().split("/")[1];
+			return patterns.equals(patterns_selected);
+		}
+	};
+ 
+  /**
+	 * Return true if patterns column != -1
+	 */
 	private static Function<Tuple2<String, String>, Boolean> filterAlonePattern = new Function<Tuple2<String, String>, Boolean>() {
 		@Override
 		public Boolean call(Tuple2<String, String> data) {
 			String[] patterns = data._2().split("/")[1].split(",");
-			return patterns.length == 1 && patterns[0].equals(patterns_selected);
+			return !Arrays.asList(patterns).contains("phases") && patterns.length == 1;// && patterns[0].equals(patterns_selected);
 		}
 	};
 
@@ -118,6 +130,19 @@ public class MainPLE {
 		public double call(Tuple2<String, String> data) {
 			String duration = data._2().split("/")[0];
 			return Double.parseDouble(duration);
+		}
+	};
+ 
+	/**
+	 * Map data to pair for stats : get duration
+	 */
+	private static PairFunction<Tuple2<String, String>, Integer, Double> mappingMultipleDurationForStats = new PairFunction<Tuple2<String, String>, Integer, Double>() {
+		@Override
+		public Tuple2<Integer, Double> call(Tuple2<String, String> data) {
+			String duration = data._2().split("/")[0];
+      String pattern = data._2().split("/")[1];
+      Tuple2<Integer, Double> pair = new Tuple2<Integer, Double>(Integer.parseInt(pattern), Double.parseDouble(duration));
+			return pair;
 		}
 	};
 
@@ -184,6 +209,52 @@ public class MainPLE {
 		}
 		return result;
 	}
+ 
+	/**
+	 * Display multiple distribution ( Minimum, Maximum, Moyenne, Médiane, premier quadrants, troisième quadrants, histogramme )
+	 */
+	private static ArrayList<String> displayMultipleDistribution(JavaPairRDD<Integer, Double> dataSet, double[] intervals) {
+		ArrayList<String> result = new ArrayList<>();
+    for(int i=0; i<22; i++){
+      List<Double> durations = dataSet.lookup(i);
+      JavaDoubleRDD data = context.parallelizeDoubles(durations);
+  		StatCounter stats = data.stats();
+  		long size = stats.count();
+  		double min = stats.min();
+  		double max = stats.max();
+  		double mean = stats.mean();
+  		double median = 0;
+  		double firstQuartile = 0;
+  		double thirdQuartile = 0;
+  		long[] values = data.histogram(intervals);
+  		NumberFormat formatter = new DecimalFormat("0.#E0");
+  
+		  if(size > 0) {
+  			JavaRDD<Double> sortedData = data.map(duration -> duration).sortBy((Double d) -> d, true, NUM_PARTITIONS);
+  			JavaPairRDD<Long, Double> indexes = sortedData.zipWithIndex().mapToPair(Tuple2::swap);
+  
+  			long indexMedian = (size % 2 == 0) ? ((size / 2) -1) : (((size + 1) / 2)-1);
+  			long indexLastOfFirstQuarter = (long) Math.ceil(size / 4.); // Calculate the number of value in one quarter
+  			long indexLastOfThirdQuarter = (long) Math.ceil(3 * size / 4.); // Calculate the number of value in three quarter
+  
+  			median = (size % 2 == 0) ? ( indexes.lookup(indexMedian).get(0) + indexes.lookup(indexMedian + 1).get(0) ) / 2 : indexes.lookup(indexMedian).get(0);
+  			firstQuartile = indexes.lookup(indexLastOfFirstQuarter).get(0); // Max value of 25% of dataset
+  			thirdQuartile = indexes.lookup(indexLastOfThirdQuarter).get(0); // Max value of 75% of dataset
+  		}
+  
+  		result.add("Minimum:	" + min);
+  		result.add("Maximum:	" + max);
+  		result.add("Moyenne:	" + mean);
+  		result.add("Mediane:	" + median);
+  		result.add("1er Quartile:	" + firstQuartile);
+  		result.add("3ème Quartile:	" + thirdQuartile);
+  		result.add("Histogramme:	");
+  		for(int j=0; j < values.length; j++) {
+  			result.add("Entre " + formatter.format(intervals[j]) + " et " + formatter.format(intervals[j+1]) + " :		" + values[j]);
+  		}
+    }
+		return result;
+	}
 
 	/**
 	 * Question 1.a
@@ -217,18 +288,13 @@ public class MainPLE {
 	 * Question 1.c
 	 */
 	private static void getDistribOfDurationAlonePattern(JavaPairRDD<String, String> data) {
-		//TODO : optimiser le temps de calcul
-		for (int i = 0; i < 22; i++) {
-			ArrayList<String> result = new ArrayList<>();
-			patterns_selected = Integer.toString(i); //Save the pattern to allow access to it  in filterAlonePattern method
-			JavaPairRDD<String, String> filteredData = data.filter(filterAlonePattern);
-			JavaDoubleRDD dataForStats = filteredData.mapToDouble(mappingDurationForStats);
-
-			result.add("Nombre de plages horaires correspondantes: " + filteredData.count() + " sur " + (data.count()-1));
-			result.addAll(displayDistribution(dataForStats, intervalsForDuration));
-			JavaRDD<String> output = context.parallelize(result);
-			output.saveAsTextFile(OUTPUT_URL + "1c_DurationDistribution_AlonePattern" + i);
-		}
+    ArrayList<String> result = new ArrayList<>();
+		JavaPairRDD<String, String> filteredData = data.filter(filterAlonePattern);
+		JavaPairRDD<Integer, Double> dataForStats = filteredData.mapToPair(mappingMultipleDurationForStats);
+    result.add("Nombre de plages horaires correspondantes: " + filteredData.count() + " sur " + (data.count()-1));
+		result.addAll(displayMultipleDistribution(dataForStats, intervalsForDuration));
+		JavaRDD<String> output = context.parallelize(result);
+		output.coalesce(1).saveAsTextFile(OUTPUT_URL + "1c_DurationDistribution_AlonePattern");
 	}
 
 	/**
