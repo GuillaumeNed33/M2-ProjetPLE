@@ -1,6 +1,5 @@
 package bigdata;
 
-import org.apache.hadoop.io.NullWritable;
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaDoubleRDD;
 import org.apache.spark.api.java.JavaPairRDD;
@@ -20,6 +19,7 @@ import java.lang.Math;
 import java.io.Serializable;
 
 public class MainPLE {
+	//TODO : utiliser coalesce(1) sur tous les output ?
 	private static JavaSparkContext context;
 
 	private static final String OUTPUT_URL = "/user/gnedelec001/output/";
@@ -91,15 +91,15 @@ public class MainPLE {
 			return patterns.equals(patterns_selected);
 		}
 	};
- 
-  /**
+
+	/**
 	 * Return true if patterns column != -1
 	 */
 	private static Function<Tuple2<String, String>, Boolean> filterAlonePattern = new Function<Tuple2<String, String>, Boolean>() {
 		@Override
 		public Boolean call(Tuple2<String, String> data) {
-			String[] patterns = data._2().split("/")[1].split(",");
-			return !Arrays.asList(patterns).contains("phases") && patterns.length == 1;
+			String nbPatterns = data._2().split("/")[2];
+			return !nbPatterns.equals("nphases") && Integer.parseInt(nbPatterns) == 1;
 		}
 	};
 
@@ -134,7 +134,7 @@ public class MainPLE {
 			return Double.parseDouble(duration);
 		}
 	};
- 
+
 	/**
 	 * Map data to pair for stats : get duration by pattern
 	 */
@@ -142,9 +142,8 @@ public class MainPLE {
 		@Override
 		public Tuple2<Integer, Double> call(Tuple2<String, String> data) {
 			String duration = data._2().split("/")[0];
-      String pattern = data._2().split("/")[1];
-      Tuple2<Integer, Double> pair = new Tuple2<Integer, Double>(Integer.parseInt(pattern), Double.parseDouble(duration));
-			return pair;
+			String pattern = data._2().split("/")[1];
+			return new Tuple2<>(Integer.parseInt(pattern), Double.parseDouble(duration));
 		}
 	};
  
@@ -228,11 +227,12 @@ public class MainPLE {
 		}
 		return result;
 	}
- 
+
 	/**
 	 * Display multiple distribution ( Minimum, Maximum, Moyenne, Médiane, premier quadrants, troisième quadrants, histogramme )
 	 */
 	private static ArrayList<String> displayMultipleDistribution(JavaPairRDD<Integer, Double> dataSet, double[] intervals) {
+		//TODO : refactoring, utiliser displayDistribution et faire la boucle for dans la question 1c
 		ArrayList<String> result = new ArrayList<>();
     List<Integer> keys = new ArrayList<Integer>();
     dataSet.keys().foreach((i) -> {
@@ -311,10 +311,10 @@ public class MainPLE {
 	 * Question 1.c
 	 */
 	private static void getDistribOfDurationAlonePattern(JavaPairRDD<String, String> data) {
-    ArrayList<String> result = new ArrayList<>();
+		ArrayList<String> result = new ArrayList<>();
 		JavaPairRDD<String, String> filteredData = data.filter(filterAlonePattern);
 		JavaPairRDD<Integer, Double> dataForStats = filteredData.mapToPair(mappingMultipleDurationForStats);
-    result.add("Nombre de plages horaires correspondantes: " + filteredData.count() + " sur " + (data.count()-1));
+		result.add("Nombre de plages horaires correspondantes: " + filteredData.count() + " sur " + (data.count()-1));
 		result.addAll(displayMultipleDistribution(dataForStats, intervalsForDuration));
 		JavaRDD<String> output = context.parallelize(result);
 		output.coalesce(1).saveAsTextFile(OUTPUT_URL + "1c_DurationDistribution_AlonePattern");
