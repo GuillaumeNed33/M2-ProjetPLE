@@ -39,7 +39,9 @@ Les patterns ciblés par le programmes doivent être donnés en arguments avec l
         --class bigdata.MainPLE target/ProjetPLE-0.0.1.jar \
         7 1 2 3 4
 
-Les chemins vers les fichiers `phases.csv`, `jobs.csv` et `patterns.csv` sont écrits en durs dans le code.  
+Les chemins vers les fichiers `phases.csv`, `jobs.csv` et `patterns.csv` sont écrits en durs dans le code.
+Le fichier utilisé actuellement est un fichier contenant 1Go de données.  
+Pour changer le fichier d'entrée, changez la **ligne 25** du fichier : `main/java/bigdata/MainPLE.java`.
 
 ## Fichiers de sorties
 
