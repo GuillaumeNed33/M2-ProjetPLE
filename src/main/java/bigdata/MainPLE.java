@@ -7,6 +7,7 @@ import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.DoubleFunction;
 import org.apache.spark.api.java.function.PairFunction;
+import org.apache.spark.api.java.function.PairFlatMapFunction;
 import org.apache.spark.api.java.function.Function;
 import org.apache.spark.util.StatCounter;
 import scala.Tuple2;
@@ -15,6 +16,7 @@ import java.text.DecimalFormat;
 import java.text.NumberFormat;
 import java.util.*;
 import java.lang.Math;
+import java.io.Serializable;
 
 public class MainPLE {
 	private static JavaSparkContext context;
@@ -59,51 +61,51 @@ public class MainPLE {
 	 * Return true if patterns column == -1
 	 */
 	private static Function<Tuple2<String, String>,  Boolean> filterIDLE = (Function<Tuple2<String, String>, Boolean>) data -> {
-        String[] patterns = data._2().split("/")[1].split(",");
-        return Arrays.asList(patterns).contains("-1") && !Arrays.asList(patterns).contains("phases"); //Dans le sujet l'entete est nommé "patterns" mais "phases" dans le fichier réel.
+		String[] patterns = data._2().split("/")[1].split(",");
+		return Arrays.asList(patterns).contains("-1") && !Arrays.asList(patterns).contains("phases"); //Dans le sujet l'entete est nommé "patterns" mais "phases" dans le fichier réel.
 
-    };
+	};
 
 	/**
 	 * Return true if patterns column != -1
 	 */
 	private static Function<Tuple2<String, String>, Boolean> filterNotIDLE = (Function<Tuple2<String, String>, Boolean>) data -> {
-        String[] patterns = data._2().split("/")[1].split(",");
-        return !Arrays.asList(patterns).contains("-1") && !Arrays.asList(patterns).contains("phases"); //Dans le sujet l'entete est nommé "patterns" mais "phases" dans le fichier réel.
-    };
+		String[] patterns = data._2().split("/")[1].split(",");
+		return !Arrays.asList(patterns).contains("-1") && !Arrays.asList(patterns).contains("phases"); //Dans le sujet l'entete est nommé "patterns" mais "phases" dans le fichier réel.
+	};
 
 
 	/**
 	 * Return true if pattern is present
 	 */
 	private static Function<Tuple2<String, String>, Boolean> filterPresentPattern = (Function<Tuple2<String, String>, Boolean>) data -> {
-			String[] patterns = data._2().split("/")[1].split(",");
-			return Arrays.asList(patterns).contains(patterns_selected);
+		String[] patterns = data._2().split("/")[1].split(",");
+		return Arrays.asList(patterns).contains(patterns_selected);
 	};
 
 	/**
 	 * Return true if pattern = pattern_selected and npattern = 1
 	 */
 	private static Function<Tuple2<String, String>, Boolean> filterAloneSelectedPattern = (Function<Tuple2<String, String>, Boolean>) data -> {
-			String[] patterns = data._2().split("/")[1].split(",");
-			return patterns.length == 1 && patterns[0].equals(patterns_selected);
+		String[] patterns = data._2().split("/")[1].split(",");
+		return patterns.length == 1 && patterns[0].equals(patterns_selected);
 	};
 
 	/**
 	 * Return true if patterns contains pattern_selected and patterns length > 1
 	 */
 	private static Function<Tuple2<String, String>, Boolean> filterMultipleSelectedPattern = (Function<Tuple2<String, String>, Boolean>) data -> {
-			String[] patterns = data._2().split("/")[1].split(",");
-			return patterns.length > 1 && Arrays.asList(patterns).contains(patterns_selected);
+		String[] patterns = data._2().split("/")[1].split(",");
+		return patterns.length > 1 && Arrays.asList(patterns).contains(patterns_selected);
 	};
 
 	/**
 	 * Return true if patterns column != -1
 	 */
 	private static Function<Tuple2<String, String>, Boolean> filterAlonePattern = (Function<Tuple2<String, String>, Boolean>) data -> {
-        String nbPatterns = data._2().split("/")[2];
-        return !nbPatterns.equals("nphases") && Integer.parseInt(nbPatterns) == 1;
-    };
+		String nbPatterns = data._2().split("/")[2];
+		return !nbPatterns.equals("nphases") && Integer.parseInt(nbPatterns) == 1;
+	};
 
 	/**
 	 * Return true if pattern columns contains all patterns from patterns in arguments
@@ -127,34 +129,35 @@ public class MainPLE {
 	 * Map data to double for stats : get duration
 	 */
 	private static DoubleFunction<Tuple2<String, String>> mappingDurationForStats = (DoubleFunction<Tuple2<String, String>>) data -> {
-        String duration = data._2().split("/")[0];
+		String duration = data._2().split("/")[0];
 		return Double.parseDouble(duration);
-    };
+	};
 
 	/**
-	 * Map data to pair for stats : get duration
+	 * Map data to pair for stats : get duration by pattern
 	 */
 	private static PairFunction<Tuple2<String, String>, Integer, Double> mappingMultipleDurationForStats = (PairFunction<Tuple2<String, String>, Integer, Double>) data -> {
-        String duration = data._2().split("/")[0];
-        String pattern = data._2().split("/")[1];
-        return new Tuple2<>(Integer.parseInt(pattern), Double.parseDouble(duration));
-    };
+		String duration = data._2().split("/")[0];
+		String pattern = data._2().split("/")[1];
+		return new Tuple2<>(Integer.parseInt(pattern), Double.parseDouble(duration));
+	};
+
 
 	/**
 	 * Map data to double for stats : get nb patterns
 	 */
 	private static DoubleFunction<Tuple2<String, String>> mappingNbPatternsForStats = (DoubleFunction<Tuple2<String, String>>) data -> {
-        String npatterns = data._2().split("/")[2];
-        return Double.parseDouble(npatterns);
-    };
+		String npatterns = data._2().split("/")[2];
+		return Double.parseDouble(npatterns);
+	};
 
 	/**
 	 * Map data to double for stats : get nb jobs
 	 */
 	private static DoubleFunction<Tuple2<String, String>> mappingNbJobsForStats = (DoubleFunction<Tuple2<String, String>>) data -> {
-        String njobs = data._2().split("/")[4];
-        return Double.parseDouble(njobs);
-    };
+		String njobs = data._2().split("/")[4];
+		return Double.parseDouble(njobs);
+	};
 
 	/**
 	 * Display distribution ( Minimum, Maximum, Moyenne, Médiane, premier quadrants, troisième quadrants, histogramme )
@@ -202,45 +205,13 @@ public class MainPLE {
 	 * Display multiple distribution ( Minimum, Maximum, Moyenne, Médiane, premier quadrants, troisième quadrants, histogramme )
 	 */
 	private static ArrayList<String> displayMultipleDistribution(JavaPairRDD<Integer, Double> dataSet, double[] intervals) {
-		//TODO : refactoring, utiliser displayDistribution et faire la boucle for dans la question 1c
 		ArrayList<String> result = new ArrayList<>();
-		for(int i=0; i<22; i++){
+		List<Integer> keys = new ArrayList<>();
+		dataSet.keys().foreach(keys::add);
+		for(Integer i : keys){
 			List<Double> durations = dataSet.lookup(i);
 			JavaDoubleRDD data = context.parallelizeDoubles(durations);
-			StatCounter stats = data.stats();
-			long size = stats.count();
-			double min = stats.min();
-			double max = stats.max();
-			double mean = stats.mean();
-			double median = 0;
-			double firstQuartile = 0;
-			double thirdQuartile = 0;
-			long[] values = data.histogram(intervals);
-			NumberFormat formatter = new DecimalFormat("0.#E0");
-
-			if(size > 0) {
-				JavaRDD<Double> sortedData = data.map(duration -> duration).sortBy((Double d) -> d, true, NUM_PARTITIONS);
-				JavaPairRDD<Long, Double> indexes = sortedData.zipWithIndex().mapToPair(Tuple2::swap);
-
-				long indexMedian = (size % 2 == 0) ? ((size / 2) -1) : (((size + 1) / 2)-1);
-				long indexLastOfFirstQuarter = (long) Math.ceil(size / 4.); // Calculate the number of value in one quarter
-				long indexLastOfThirdQuarter = (long) Math.ceil(3 * size / 4.); // Calculate the number of value in three quarter
-
-				median = (size % 2 == 0) ? ( indexes.lookup(indexMedian).get(0) + indexes.lookup(indexMedian + 1).get(0) ) / 2 : indexes.lookup(indexMedian).get(0);
-				firstQuartile = indexes.lookup(indexLastOfFirstQuarter).get(0); // Max value of 25% of dataset
-				thirdQuartile = indexes.lookup(indexLastOfThirdQuarter).get(0); // Max value of 75% of dataset
-			}
-
-			result.add("Minimum:	" + min);
-			result.add("Maximum:	" + max);
-			result.add("Moyenne:	" + mean);
-			result.add("Mediane:	" + median);
-			result.add("1er Quartile:	" + firstQuartile);
-			result.add("3ème Quartile:	" + thirdQuartile);
-			result.add("Histogramme:	");
-			for(int j=0; j < values.length; j++) {
-				result.add("Entre " + formatter.format(intervals[j]) + " et " + formatter.format(intervals[j+1]) + " :		" + values[j]);
-			}
+			result.addAll(displayDistribution(data, intervals));
 		}
 		return result;
 	}
@@ -310,47 +281,47 @@ public class MainPLE {
 		output.coalesce(1).saveAsTextFile(OUTPUT_URL + "3_NbJobsDistributionPerPhase");
 	}
 
+	public interface SerializableComparator<T> extends Comparator<T>, Serializable {
+		static <T> SerializableComparator<T> serialize(SerializableComparator<T> comparator) {
+			return comparator;
+		}
+	}
+
 	/**
 	 * Question 4.a et 4.b
 	 */
 	private static void getDistribOfTotalPFSAccessPerJob(JavaPairRDD<String, String> data) {
-		//TODO: question 4.a 4.b
-		TreeMap<Double, String> top10 = new TreeMap<>();
-
 		//Question 4.a
-		System.out.println("--- DISTRIBUTION DU TEMPS TOTAL D'ACCES AU PFS PAR JOB ---");
-		for(int i = 0; i < 10; i++) {
-			ArrayList<String> result = new ArrayList<>();
-			double key = 1.;
-			if (top10.containsKey(key)) {
-				String previousPattern = top10.get(key);
-				top10.put(key, previousPattern + "," + "");
-			} else {
-				top10.put(key, "");
+		ArrayList<String> distrib = new ArrayList<>();
+		distrib.add("--- DISTRIBUTION DU TEMPS TOTAL D'ACCES AU PFS PAR JOB ---");
+		JavaPairRDD<String, String> filteredData = data.filter(filterNotIDLE);
+		JavaPairRDD<Integer, Double> mapJobDuration = filteredData.flatMapToPair(p -> {
+			Double duration = Double.parseDouble(p._2().split("/")[0]);
+			String[] jobs = p._2().split("/")[3].split(",");
+			ArrayList<Tuple2<Integer, Double>> result = new ArrayList<>();
+			for(String s : jobs){
+				Tuple2<Integer, Double> pair = new Tuple2<>(Integer.parseInt(s), duration);
+				result.add(pair);
 			}
-			if (top10.size() > 10) {
-				top10.remove(top10.firstKey());
-			}
-			//result.add("Resultat du pattern " + i + " en millisecondes: " +	dataForStats.stats().sum() + " sur " + allForStats.stats().sum() + ". Soit " + percentage + "% du temps total des phases");
-			JavaRDD<String> output = context.parallelize(result);
-			output.coalesce(1).saveAsTextFile(OUTPUT_URL + "4a_distribOfTotalPFSAccessPerJob_" + i);
-		}
+			return result.iterator();
+		});
+		mapJobDuration = mapJobDuration.reduceByKey((v1, v2) -> v1 + v2);
+		JavaDoubleRDD dataForStats = mapJobDuration.mapToDouble(Tuple2::_2);
+		distrib.addAll(displayDistribution(dataForStats, intervalsForDuration));
+		JavaRDD<String> outputDistribution = context.parallelize(distrib);
+		outputDistribution.coalesce(1).saveAsTextFile(OUTPUT_URL + "4a_DistributionJobs");
 
 		//Question 4.b
-		ArrayList<String> resultTop10 = new ArrayList<>();
-		int position = 10;
-		for (Map.Entry<Double, String> entry : top10.entrySet()) {
-			double topPercent = entry.getKey();
-			String topJob = entry.getValue();
-			String egalite = "";
-			if(topJob.split(",").length > 1) {
-				egalite = "[EGALITE]";
-			}
-			resultTop10.add(position + egalite + " : Pattern " + topJob+ " avec " + topPercent + "% du temps total.");
-			position--;
+		List<Tuple2<Integer, Double>> top10 = mapJobDuration.top(10, SerializableComparator.serialize((t1, t2) -> t1._2()<t2._2() ? -1 : t1._2()>t2._2() ? 1 : 0));
+		ArrayList<String> top10String = new ArrayList<>();
+		top10String.add("--- TOP 10 JOBS EN TEMPS TOTAL D'ACCES AU PFS ---");
+		int rang = 1;
+		for(Tuple2<Integer, Double> p : top10){
+			top10String.add("Numero " + Integer.toString(rang) + " : Job " + Integer.toString(p._1()) + ", duree : " + Double.toString(p._2()));
+			rang++;
 		}
-		JavaRDD<String> output = context.parallelize(resultTop10);
-		output.coalesce(1).saveAsTextFile(OUTPUT_URL + "4b_top10TotalPFSAccess");
+		JavaRDD<String> outputTop10 = context.parallelize(top10String);
+		outputTop10.coalesce(1).saveAsTextFile(OUTPUT_URL + "4b_DistributionJobs");
 	}
 
 	/**
@@ -377,8 +348,8 @@ public class MainPLE {
 		//Question 6a
 		ArrayList<String> result = new ArrayList<>();
 		for (int i = 0; i < 22; i++) {
-            patterns_selected = Integer.toString(i); //Save the pattern to allow access to it  in filterAlonePattern method
-            JavaPairRDD<String, String> isPatternPresent = filteredNotIDLE.filter(filterPresentPattern);
+			patterns_selected = Integer.toString(i); //Save the pattern to allow access to it  in filterAlonePattern method
+			JavaPairRDD<String, String> isPatternPresent = filteredNotIDLE.filter(filterPresentPattern);
 
 			JavaPairRDD<String, String> filteredPatternAlone = isPatternPresent.filter(filterAloneSelectedPattern);
 			JavaPairRDD<String, String> filteredPatternMultiple = isPatternPresent.filter(filterMultipleSelectedPattern);
@@ -410,7 +381,6 @@ public class MainPLE {
 		output6a.coalesce(1).saveAsTextFile(OUTPUT_URL + "6a_PercentOfTotalTimeForPattern");
 
 		//Question 6b
-		//TODO plutot que d'utiliser une map, regarder JavaPairRDD::top(int num)
 		ArrayList<String> resultTop10 = new ArrayList<>();
 		int position = 10;
 		for (Map.Entry<Double, String> entry : top10.entrySet()) {
