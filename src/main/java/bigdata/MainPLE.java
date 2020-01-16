@@ -17,7 +17,6 @@ import java.util.*;
 import java.lang.Math;
 
 public class MainPLE {
-	//TODO : utiliser coalesce(1) sur tous les output ?
 	private static JavaSparkContext context;
 
 	private static final String OUTPUT_URL = "/user/gnedelec001/output/";
@@ -26,7 +25,7 @@ public class MainPLE {
 	//private static final String PHASES_FILE_URL = "/user/gnedelec001/resources/phasesTail1Go.csv";
 	//private static final String PHASES_FILE_URL = "/user/gnedelec001/resources/phasesTail10Go.csv";
 	//private static final String PHASES_FILE_URL = "/raw_data/ALCF_repo/phases.csv";
-	//TODO: utiliser les fichiers jobs.csv et patterns.csv
+
 	private static final String JOBS_FILE_URL = "/raw_data/ALCF_repo/jobs.csv";
 	private static final String PATTERNS_FILE_URL = "/raw_data/ALCF_repo/patterns.csv";
 
@@ -36,9 +35,9 @@ public class MainPLE {
 	private static String patterns_selected;
 
 	private static final double[] intervalsForNbPatterns = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22};
-	//TODO: determiner echelle pour l'histogramme des njobs
-	private static final double[] intervalsForNbJobs = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22};
+	private static final double[] intervalsForNbJobs = {0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 1000, 100000};
 	private static final double[] intervalsForDuration = {
+			0,
 			1.0,
 			1.0E2,
 			1.0E3,
@@ -59,113 +58,103 @@ public class MainPLE {
 	/**
 	 * Return true if patterns column == -1
 	 */
-	private static Function<Tuple2<String, String>,  Boolean> filterIDLE = new Function<Tuple2<String, String>,  Boolean>() {
-		@Override
-		public Boolean call(Tuple2<String, String> data) {
+	private static Function<Tuple2<String, String>,  Boolean> filterIDLE = (Function<Tuple2<String, String>, Boolean>) data -> {
+        String[] patterns = data._2().split("/")[1].split(",");
+        return Arrays.asList(patterns).contains("-1") && !Arrays.asList(patterns).contains("phases"); //Dans le sujet l'entete est nommé "patterns" mais "phases" dans le fichier réel.
+
+    };
+
+	/**
+	 * Return true if patterns column != -1
+	 */
+	private static Function<Tuple2<String, String>, Boolean> filterNotIDLE = (Function<Tuple2<String, String>, Boolean>) data -> {
+        String[] patterns = data._2().split("/")[1].split(",");
+        return !Arrays.asList(patterns).contains("-1") && !Arrays.asList(patterns).contains("phases"); //Dans le sujet l'entete est nommé "patterns" mais "phases" dans le fichier réel.
+    };
+
+
+	/**
+	 * Return true if pattern is present
+	 */
+	private static Function<Tuple2<String, String>, Boolean> filterPresentPattern = (Function<Tuple2<String, String>, Boolean>) data -> {
 			String[] patterns = data._2().split("/")[1].split(",");
-			return Arrays.asList(patterns).contains("-1") && !Arrays.asList(patterns).contains("phases"); //Dans le sujet l'entete est nommé "patterns" mais "phases" dans le fichier réel.
-
-		}
+			return Arrays.asList(patterns).contains(patterns_selected);
 	};
 
 	/**
-	 * Return true if patterns column != -1
+	 * Return true if pattern = pattern_selected and npattern = 1
 	 */
-	private static Function<Tuple2<String, String>, Boolean> filterNotIDLE = new Function<Tuple2<String, String>, Boolean>() {
-		@Override
-		public Boolean call(Tuple2<String, String> data) {
+	private static Function<Tuple2<String, String>, Boolean> filterAloneSelectedPattern = (Function<Tuple2<String, String>, Boolean>) data -> {
 			String[] patterns = data._2().split("/")[1].split(",");
-			return !Arrays.asList(patterns).contains("-1") && !Arrays.asList(patterns).contains("phases"); //Dans le sujet l'entete est nommé "patterns" mais "phases" dans le fichier réel.
-		}
+			return patterns.length == 1 && patterns[0].equals(patterns_selected);
+	};
+
+	/**
+	 * Return true if patterns contains pattern_selected and patterns length > 1
+	 */
+	private static Function<Tuple2<String, String>, Boolean> filterMultipleSelectedPattern = (Function<Tuple2<String, String>, Boolean>) data -> {
+			String[] patterns = data._2().split("/")[1].split(",");
+			return patterns.length > 1 && Arrays.asList(patterns).contains(patterns_selected);
 	};
 
 	/**
 	 * Return true if patterns column != -1
 	 */
-	private static Function<Tuple2<String, String>, Boolean> isolatePattern = new Function<Tuple2<String, String>, Boolean>() {
-		@Override
-		public Boolean call(Tuple2<String, String> data) {
-			String patterns = data._2().split("/")[1];
-			return patterns.equals(patterns_selected);
-		}
-	};
-
-	/**
-	 * Return true if patterns column != -1
-	 */
-	private static Function<Tuple2<String, String>, Boolean> filterAlonePattern = new Function<Tuple2<String, String>, Boolean>() {
-		@Override
-		public Boolean call(Tuple2<String, String> data) {
-			String nbPatterns = data._2().split("/")[2];
-			return !nbPatterns.equals("nphases") && Integer.parseInt(nbPatterns) == 1;// && patterns[0].equals(patterns_selected);
-		}
-	};
+	private static Function<Tuple2<String, String>, Boolean> filterAlonePattern = (Function<Tuple2<String, String>, Boolean>) data -> {
+        String nbPatterns = data._2().split("/")[2];
+        return !nbPatterns.equals("nphases") && Integer.parseInt(nbPatterns) == 1;
+    };
 
 	/**
 	 * Return true if pattern columns contains all patterns from patterns in arguments
 	 */
-	private static Function<Tuple2<String, String>, Boolean> filterMatchingPatterns = new Function<Tuple2<String, String>, Boolean>() {
-		@Override
-		public Boolean call(Tuple2<String, String> data) {
-			String[] patterns = data._2().split("/")[1].split(",");
-			boolean allAreMatching = true;
-			int i = 0;
-			while(allAreMatching && i < target_patterns.length) {
-				String currentPattern = target_patterns[i];
-				if(!Arrays.asList(patterns).contains(currentPattern)) {
-					allAreMatching = false;
-				} else {
-					i++;
-				}
+	private static Function<Tuple2<String, String>, Boolean> filterMatchingPatterns = (Function<Tuple2<String, String>, Boolean>) data -> {
+		String[] patterns = data._2().split("/")[1].split(",");
+		boolean allAreMatching = true;
+		int i = 0;
+		while(allAreMatching && i < target_patterns.length) {
+			String currentPattern = target_patterns[i];
+			if(!Arrays.asList(patterns).contains(currentPattern)) {
+				allAreMatching = false;
+			} else {
+				i++;
 			}
-			return allAreMatching;
 		}
+		return allAreMatching;
 	};
 
 	/**
 	 * Map data to double for stats : get duration
 	 */
-	private static DoubleFunction<Tuple2<String, String>> mappingDurationForStats = new DoubleFunction<Tuple2<String, String>>() {
-		@Override
-		public double call(Tuple2<String, String> data) {
-			String duration = data._2().split("/")[0];
-			return Double.parseDouble(duration);
-		}
-	};
+	private static DoubleFunction<Tuple2<String, String>> mappingDurationForStats = (DoubleFunction<Tuple2<String, String>>) data -> {
+        String duration = data._2().split("/")[0];
+		return Double.parseDouble(duration);
+    };
 
 	/**
 	 * Map data to pair for stats : get duration
 	 */
-	private static PairFunction<Tuple2<String, String>, Integer, Double> mappingMultipleDurationForStats = new PairFunction<Tuple2<String, String>, Integer, Double>() {
-		@Override
-		public Tuple2<Integer, Double> call(Tuple2<String, String> data) {
-			String duration = data._2().split("/")[0];
-			String pattern = data._2().split("/")[1];
-			return new Tuple2<>(Integer.parseInt(pattern), Double.parseDouble(duration));
-		}
-	};
+	private static PairFunction<Tuple2<String, String>, Integer, Double> mappingMultipleDurationForStats = (PairFunction<Tuple2<String, String>, Integer, Double>) data -> {
+        String duration = data._2().split("/")[0];
+        String pattern = data._2().split("/")[1];
+        return new Tuple2<>(Integer.parseInt(pattern), Double.parseDouble(duration));
+    };
 
 	/**
 	 * Map data to double for stats : get nb patterns
 	 */
-	private static DoubleFunction<Tuple2<String, String>> mappingNbPatternsForStats = new DoubleFunction<Tuple2<String, String>>() {
-		@Override
-		public double call(Tuple2<String, String> data) {
-			String npatterns = data._2().split("/")[2];
-			return Double.parseDouble(npatterns);
-		}
-	};
+	private static DoubleFunction<Tuple2<String, String>> mappingNbPatternsForStats = (DoubleFunction<Tuple2<String, String>>) data -> {
+        String npatterns = data._2().split("/")[2];
+        return Double.parseDouble(npatterns);
+    };
 
 	/**
 	 * Map data to double for stats : get nb jobs
 	 */
-	private static DoubleFunction<Tuple2<String, String>> mappingNbJobsForStats = new DoubleFunction<Tuple2<String, String>>() {
-		@Override
-		public double call(Tuple2<String, String> data) {
-			String njobs = data._2().split("/")[4];
-			return Double.parseDouble(njobs);
-		}
-	};
+	private static DoubleFunction<Tuple2<String, String>> mappingNbJobsForStats = (DoubleFunction<Tuple2<String, String>>) data -> {
+        String njobs = data._2().split("/")[4];
+        return Double.parseDouble(njobs);
+    };
 
 	/**
 	 * Display distribution ( Minimum, Maximum, Moyenne, Médiane, premier quadrants, troisième quadrants, histogramme )
@@ -214,7 +203,6 @@ public class MainPLE {
 	 */
 	private static ArrayList<String> displayMultipleDistribution(JavaPairRDD<Integer, Double> dataSet, double[] intervals) {
 		//TODO : refactoring, utiliser displayDistribution et faire la boucle for dans la question 1c
-		//TODO isolatePattern is never used
 		ArrayList<String> result = new ArrayList<>();
 		for(int i=0; i<22; i++){
 			List<Double> durations = dataSet.lookup(i);
@@ -268,7 +256,7 @@ public class MainPLE {
 		result.add("Nombre de plages horaires correspondantes: " + filteredData.count() + " sur " + (data.count()-1));
 		result.addAll(displayDistribution(dataForStats, intervalsForDuration));
 		JavaRDD<String> output = context.parallelize(result);
-		output.saveAsTextFile(OUTPUT_URL + "1a_DurationDistribution_NotIDLE");
+		output.coalesce(1).saveAsTextFile(OUTPUT_URL + "1a_DurationDistribution_NotIDLE");
 	}
 
 	/**
@@ -282,7 +270,7 @@ public class MainPLE {
 		result.add("Nombre de plages horaires correspondantes: " + filteredData.count() + " sur " + (data.count()-1));
 		result.addAll(displayDistribution(dataForStats, intervalsForDuration));
 		JavaRDD<String> output = context.parallelize(result);
-		output.saveAsTextFile(OUTPUT_URL + "1b_DurationDistribution_IDLE");
+		output.coalesce(1).saveAsTextFile(OUTPUT_URL + "1b_DurationDistribution_IDLE");
 	}
 
 	/**
@@ -307,7 +295,7 @@ public class MainPLE {
 
 		ArrayList<String> result = new ArrayList<>(displayDistribution(dataForStats, intervalsForNbPatterns));
 		JavaRDD<String> output = context.parallelize(result);
-		output.saveAsTextFile(OUTPUT_URL + "2_NbPatternsDistributionPerPhase");
+		output.coalesce(1).saveAsTextFile(OUTPUT_URL + "2_NbPatternsDistributionPerPhase");
 	}
 
 	/**
@@ -319,7 +307,7 @@ public class MainPLE {
 
 		ArrayList<String> result = new ArrayList<>(displayDistribution(dataForStats, intervalsForNbJobs));
 		JavaRDD<String> output = context.parallelize(result);
-		output.saveAsTextFile(OUTPUT_URL + "3_NbJobsDistributionPerPhase");
+		output.coalesce(1).saveAsTextFile(OUTPUT_URL + "3_NbJobsDistributionPerPhase");
 	}
 
 	/**
@@ -345,7 +333,7 @@ public class MainPLE {
 			}
 			//result.add("Resultat du pattern " + i + " en millisecondes: " +	dataForStats.stats().sum() + " sur " + allForStats.stats().sum() + ". Soit " + percentage + "% du temps total des phases");
 			JavaRDD<String> output = context.parallelize(result);
-			output.saveAsTextFile(OUTPUT_URL + "4a_distribOfTotalPFSAccessPerJob_" + i);
+			output.coalesce(1).saveAsTextFile(OUTPUT_URL + "4a_distribOfTotalPFSAccessPerJob_" + i);
 		}
 
 		//Question 4.b
@@ -362,7 +350,7 @@ public class MainPLE {
 			position--;
 		}
 		JavaRDD<String> output = context.parallelize(resultTop10);
-		output.saveAsTextFile(OUTPUT_URL + "4b_top10TotalPFSAccess");
+		output.coalesce(1).saveAsTextFile(OUTPUT_URL + "4b_top10TotalPFSAccess");
 	}
 
 	/**
@@ -375,7 +363,7 @@ public class MainPLE {
 
 		result.add("Resultat en microsecondes:	" + dataForStats.stats().sum());
 		JavaRDD<String> output = context.parallelize(result);
-		output.saveAsTextFile(OUTPUT_URL + "5_getTotalDurationIDLE");
+		output.coalesce(1).saveAsTextFile(OUTPUT_URL + "5_getTotalDurationIDLE");
 	}
 
 	/**
@@ -383,31 +371,43 @@ public class MainPLE {
 	 */
 	private static void getPercentOfTotalTimeWhereAPatternIsAlone(JavaPairRDD<String, String> data) {
 		TreeMap<Double, String> top10 = new TreeMap<>();
-		JavaDoubleRDD allForStats = data.filter(filterNotIDLE).mapToDouble(mappingDurationForStats);
+		JavaPairRDD<String, String> filteredNotIDLE = data.filter(filterNotIDLE);
+		Double allForStats = filteredNotIDLE.mapToDouble(mappingDurationForStats).sum();
 
-		//Question 6.a
+		//Question 6a
 		ArrayList<String> result = new ArrayList<>();
-		//TODO : optimiser le temps de calcul
 		for (int i = 0; i < 22; i++) {
-			patterns_selected = Integer.toString(i); //Save the pattern to allow access to it  in filterAlonePattern method
-			JavaPairRDD<String, String> filteredData = data.filter(filterAlonePattern);
-			JavaDoubleRDD dataForStats = filteredData.mapToDouble(mappingDurationForStats);
-			double percentage = dataForStats.sum() / allForStats.sum() * 100;
+            patterns_selected = Integer.toString(i); //Save the pattern to allow access to it  in filterAlonePattern method
+            JavaPairRDD<String, String> isPatternPresent = filteredNotIDLE.filter(filterPresentPattern);
+
+			JavaPairRDD<String, String> filteredPatternAlone = isPatternPresent.filter(filterAloneSelectedPattern);
+			JavaPairRDD<String, String> filteredPatternMultiple = isPatternPresent.filter(filterMultipleSelectedPattern);
+
+			JavaDoubleRDD dataForStatsAlone = filteredPatternAlone.mapToDouble(mappingDurationForStats);
+			JavaDoubleRDD dataForStatsMultiple = filteredPatternMultiple.mapToDouble(mappingDurationForStats);
+
+			double sumDataAlone = dataForStatsAlone.sum();
+			double sumDataMultiple = dataForStatsMultiple.sum();
+			double percentageAlone = sumDataAlone / allForStats * 100;
+			double percentageMultiple = sumDataMultiple / allForStats * 100;
+			double representativite = percentageAlone + percentageMultiple;
+
 			//Manage key duplication (2 patterns with the same percent)
-			if(top10.containsKey(percentage)) {
-				String previousPattern = top10.get(percentage);
-				top10.put(percentage, previousPattern + "," + i);
+			if(top10.containsKey(representativite)) {
+				String previousPattern = top10.get(representativite);
+				top10.put(representativite, previousPattern + "," + i);
 			} else {
-				top10.put(percentage, Integer.toString(i));
+				top10.put(representativite, Integer.toString(i));
 			}
 
 			if(top10.size() > 10) {
 				top10.remove(top10.firstKey());
 			}
-			result.add("Resultat du pattern " + i + " en millisecondes: " +	dataForStats.stats().sum() + " sur " + allForStats.stats().sum() + ". Soit " + percentage + "% du temps total des phases");
+			result.add("Resultat du pattern SEUL " + i + " en millisecondes: " +	sumDataAlone + " sur " + allForStats + ". Soit " + percentageAlone + "% du temps total des phases");
+			result.add("Resultat du pattern EN CONCURRENCE" + i + " en millisecondes: " +	sumDataMultiple + " sur " + allForStats + ". Soit " + percentageMultiple + "% du temps total des phases");
 		}
 		JavaRDD<String> output6a = context.parallelize(result);
-		output6a.saveAsTextFile(OUTPUT_URL + "6a_PercentOfTotalTimeForPattern");
+		output6a.coalesce(1).saveAsTextFile(OUTPUT_URL + "6a_PercentOfTotalTimeForPattern");
 
 		//Question 6b
 		//TODO plutot que d'utiliser une map, regarder JavaPairRDD::top(int num)
@@ -424,7 +424,7 @@ public class MainPLE {
 			position--;
 		}
 		JavaRDD<String> output6b = context.parallelize(resultTop10);
-		output6b.saveAsTextFile(OUTPUT_URL + "6b_top10PercentOfTotalTime");
+		output6b.coalesce(1).saveAsTextFile(OUTPUT_URL + "6b_top10PercentOfTotalTime");
 	}
 
 	/**
@@ -433,7 +433,7 @@ public class MainPLE {
 	private static void getLinesMatchingWithPatterns(JavaPairRDD<String, String> data) {
 		//TODO: temps linéaire
 		JavaPairRDD<String, String> filteredData = data.filter(filterMatchingPatterns);
-		filteredData.saveAsTextFile(OUTPUT_URL + "7_getLinesMatchingWithPatterns_" + String.join("_", target_patterns));
+		filteredData.coalesce(1).saveAsTextFile(OUTPUT_URL + "7_getLinesMatchingWithPatterns_" + String.join("_", target_patterns));
 	}
 
 	/**
