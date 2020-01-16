@@ -251,7 +251,6 @@ public class MainPLE {
 		ArrayList<String> result = new ArrayList<>();
 		JavaPairRDD<String, String> filteredData = data.filter(filterAlonePattern);
 		JavaPairRDD<Integer, Double> dataForStats = filteredData.mapToPair(mappingMultipleDurationForStats);
-		result.add("Nombre de plages horaires correspondantes: " + filteredData.count() + " sur " + (data.count()-1));
 		result.addAll(displayMultipleDistribution(dataForStats, intervalsForDuration));
 		JavaRDD<String> output = context.parallelize(result);
 		output.coalesce(1).saveAsTextFile(OUTPUT_URL + "1c_DurationDistribution_AlonePattern");
