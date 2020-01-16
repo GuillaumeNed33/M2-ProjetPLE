@@ -8,6 +8,7 @@ import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.DoubleFunction;
 import org.apache.spark.api.java.function.PairFunction;
+import org.apache.spark.api.java.function.PairFlatMapFunction;
 import org.apache.spark.api.java.function.Function;
 import org.apache.spark.util.StatCounter;
 import scala.Tuple2;
@@ -16,6 +17,7 @@ import java.text.DecimalFormat;
 import java.text.NumberFormat;
 import java.util.*;
 import java.lang.Math;
+import java.io.Serializable;
 
 public class MainPLE {
 	private static JavaSparkContext context;
@@ -97,7 +99,7 @@ public class MainPLE {
 		@Override
 		public Boolean call(Tuple2<String, String> data) {
 			String[] patterns = data._2().split("/")[1].split(",");
-			return !Arrays.asList(patterns).contains("phases") && patterns.length == 1;// && patterns[0].equals(patterns_selected);
+			return !Arrays.asList(patterns).contains("phases") && patterns.length == 1;
 		}
 	};
 
@@ -134,7 +136,7 @@ public class MainPLE {
 	};
  
 	/**
-	 * Map data to pair for stats : get duration
+	 * Map data to pair for stats : get duration by pattern
 	 */
 	private static PairFunction<Tuple2<String, String>, Integer, Double> mappingMultipleDurationForStats = new PairFunction<Tuple2<String, String>, Integer, Double>() {
 		@Override
@@ -145,6 +147,23 @@ public class MainPLE {
 			return pair;
 		}
 	};
+ 
+	/**
+	 * Map data to pair for stats : get duration by job
+	 */
+	/*private static PairFlatMapFunction<Tuple2<String, String>, Integer, Double> mappingMultipleJobsDurationForStats = new PairFlatMapFunction<Tuple2<String, String>, Integer, Double>() {
+		@Override
+		public Tuple2<Integer, Double> call(Tuple2<String, String> data) {
+			Integer duration = Integer.parseInt(data._2().split("/")[0]);
+      String[] jobs = data._2().split("/")[3].split(",");
+      ArrayList<Tuple2<String, Integer>> result = new ArrayList<Tuple2<String, Integer>>();
+      for(String s : jobs){
+        Tuple2<String, Integer> pair = new Tuple2<String, Integer>(s, duration);
+        result.add(pair);
+      }
+      return result.iterator();
+		}
+	};*/
 
 	/**
 	 * Map data to double for stats : get nb patterns
@@ -215,7 +234,11 @@ public class MainPLE {
 	 */
 	private static ArrayList<String> displayMultipleDistribution(JavaPairRDD<Integer, Double> dataSet, double[] intervals) {
 		ArrayList<String> result = new ArrayList<>();
-    for(int i=0; i<22; i++){
+    List<Integer> keys = new ArrayList<Integer>();
+    dataSet.keys().foreach((i) -> {
+      keys.add(i);
+    });
+    for(Integer i : keys){
       List<Double> durations = dataSet.lookup(i);
       JavaDoubleRDD data = context.parallelizeDoubles(durations);
   		StatCounter stats = data.stats();
@@ -320,48 +343,51 @@ public class MainPLE {
 		JavaRDD<String> output = context.parallelize(result);
 		output.saveAsTextFile(OUTPUT_URL + "3_NbJobsDistributionPerPhase");
 	}
+ 
+  public interface SerializableComparator<T> extends Comparator<T>, Serializable {
+    static <T> SerializableComparator<T> serialize(SerializableComparator<T> comparator) {
+      return comparator;
+    }
+  }
 
 	/**
 	 * Question 4.a et 4.b
 	 */
 	private static void getDistribOfTotalPFSAccessPerJob(JavaPairRDD<String, String> data) {
-		//TODO: question 4.a 4.b
-		TreeMap<Double, String> top10 = new TreeMap<>();
-
 		//Question 4.a
-		System.out.println("--- DISTRIBUTION DU TEMPS TOTAL D'ACCES AU PFS PAR JOB ---");
-		for(int i = 0; i < 10; i++) {
-			ArrayList<String> result = new ArrayList<>();
-			double key = 1.;
-			if (top10.containsKey(key)) {
-				String previousPattern = top10.get(key);
-				top10.put(key, previousPattern + "," + "");
-			} else {
-				top10.put(key, "");
-			}
-			if (top10.size() > 10) {
-				top10.remove(top10.firstKey());
-			}
-			//result.add("Resultat du pattern " + i + " en millisecondes: " +	dataForStats.stats().sum() + " sur " + allForStats.stats().sum() + ". Soit " + percentage + "% du temps total des phases");
-			JavaRDD<String> output = context.parallelize(result);
-			output.saveAsTextFile(OUTPUT_URL + "4a_distribOfTotalPFSAccessPerJob_" + i);
-		}
-
-		//Question 4.b
-		ArrayList<String> resultTop10 = new ArrayList<>();
-		int position = 10;
-		for (Map.Entry<Double, String> entry : top10.entrySet()) {
-			double topPercent = entry.getKey();
-			String topJob = entry.getValue();
-			String egalite = "";
-			if(topJob.split(",").length > 1) {
-				egalite = "[EGALITE]";
-			}
-			resultTop10.add(position + egalite + " : Pattern " + topJob+ " avec " + topPercent + "% du temps total.");
-			position--;
-		}
-		JavaRDD<String> output = context.parallelize(resultTop10);
-		output.saveAsTextFile(OUTPUT_URL + "4b_top10TotalPFSAccess");
+    ArrayList<String> distrib = new ArrayList<String>();
+    distrib.add("--- DISTRIBUTION DU TEMPS TOTAL D'ACCES AU PFS PAR JOB ---");
+    JavaPairRDD<String, String> filteredData = data.filter(filterNotIDLE);
+    JavaPairRDD<Integer, Double> mapJobDuration = filteredData.flatMapToPair(p -> {
+      Double duration = Double.parseDouble(p._2().split("/")[0]);
+      String[] jobs = p._2().split("/")[3].split(",");
+      ArrayList<Tuple2<Integer, Double>> result = new ArrayList<Tuple2<Integer, Double>>();
+      for(String s : jobs){
+        Tuple2<Integer, Double> pair = new Tuple2<Integer, Double>(Integer.parseInt(s), duration);
+        result.add(pair);
+      }
+      return result.iterator();
+    });
+    mapJobDuration = mapJobDuration.reduceByKey((v1, v2) -> v1 + v2);
+    JavaDoubleRDD dataForStats = mapJobDuration.mapToDouble((p) -> {
+      return p._2();
+    });
+		distrib.addAll(displayDistribution(dataForStats, intervalsForDuration));
+    JavaRDD<String> outputDistribution = context.parallelize(distrib);
+		outputDistribution.coalesce(1).saveAsTextFile(OUTPUT_URL + "4a_DistributionJobs");
+   
+    List<Tuple2<Integer, Double>> top10 = mapJobDuration.top(10, SerializableComparator.serialize((t1, t2) -> {
+      return t1._2()<t2._2() ? -1 : t1._2()>t2._2() ? 1 : 0;
+    }));
+    ArrayList<String> top10String = new ArrayList<String>();
+    top10String.add("--- TOP 10 JOBS EN TEMPS TOTAL D'ACCES AU PFS ---");
+    int rang = 1;
+    for(Tuple2<Integer, Double> p : top10){
+      top10String.add("Numero " + Integer.toString(rang) + " : Job " + Integer.toString(p._1()) + ", duree : " + Double.toString(p._2()));
+      rang++;
+    }
+    JavaRDD<String> outputTop10 = context.parallelize(top10String);
+    outputTop10.coalesce(1).saveAsTextFile(OUTPUT_URL + "4b_DistributionJobs");
 	}
 
 	/**
